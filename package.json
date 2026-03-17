@@ -10,10 +10,13 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "mkdir -p ./dist && cp -r ./src/* ./dist/",
     "dev": "npx http-server ./src/ --port=8080",
-    "fest": "npx playwright test"
+    "fest": "npx playwright test",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@types/node": "^25.5.0"
+    "@types/node": "^25.5.0",
+    "wrangler": "^4.74.0"
   }
 }
