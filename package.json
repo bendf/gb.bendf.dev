@@ -1,0 +1,19 @@
+{
+  "name": "gb.bendf.dev",
+  "version": "1.0.0",
+  "description": "gb.bendf.dev site",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "mkdir -p ./dist && cp -r ./src/* ./dist/",
+    "dev": "npx http-server ./src/ --port=8080",
+    "fest": "npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0"
+  }
+}
