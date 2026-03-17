@@ -14,3 +14,8 @@ test("Has header", async ({ page }) => {
     page.getByRole("heading", { name: "Ben's GB emulator" }),
   ).toBeVisible();
 });
+
+test("Renders a canvas", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("gb-screen")).toBeVisible();
+});
