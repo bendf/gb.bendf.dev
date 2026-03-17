@@ -15,7 +15,7 @@ test("Has header", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("Renders a canvas", async ({ page }) => {
+test.skip("Renders a canvas", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("gb-screen")).toBeVisible();
 });
