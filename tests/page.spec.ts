@@ -15,7 +15,11 @@ test("Has header", async ({ page }) => {
   ).toBeVisible();
 });
 
-test.skip("Renders a canvas", async ({ page }) => {
+test("Renders gameboy-size canvas", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByTestId("gb-screen")).toBeVisible();
+
+  const canvas = page.locator("#squaregb-screen");
+  await expect(canvas).toBeVisible();
+  expect(await canvas.getAttribute("width")).toBe("160");
+  expect(await canvas.getAttribute("height")).toBe("144");
 });
