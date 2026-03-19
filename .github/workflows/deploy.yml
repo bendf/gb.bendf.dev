@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Setup rust
-        run: apt install rustup
+        run: sudo apt install rustup
       - uses: actions/checkout@v6
       - name: Build crate
         working-directory: ./squaregb
