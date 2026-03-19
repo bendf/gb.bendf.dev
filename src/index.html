@@ -1,7 +1,8 @@
 <!DOCTYPE HTML>
 <html lang="en">
 
-	<head><title>Ben's GB emulator</title></head>
+	<head><title>Ben's GB emulator</title>
+	<link href="/main.css" rel="stylesheet"></head>
 	<body>
 		<h1>Ben's GB emulator</h1>
 
@@ -9,6 +10,21 @@
 		<p id="wasm-console" data-testid="wasm-console"></p>
 
 		<main id="squaregb-root">
+			<canvas id="squaregb-screen" width="160" height="144"></canvas>
+			<div id="squaregb-dpad">
+				<button id="squaregb-up">UP</button>
+				<button id="squaregb-down">DOWN</button>
+				<button id="squaregb-left">LEFT</button>
+				<button id="squaregb-right">RIGHT</button>
+			</div>
+			<div id="squaregb-ab">
+				<button id="squaregb-a">A</button>
+				<button id="squaregb-b">B</button>
+			</div>
+			<div id="squaregb-selstart">
+				<button id="squaregb-select">SELECT</button>
+				<button id="squaregb-start">START</button>
+			</div>
 		</main>
 
 		<aside>

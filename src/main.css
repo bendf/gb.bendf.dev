@@ -1,0 +1,79 @@
+#squaregb-root {
+	max-width: 500px;
+	display: grid;
+	justify-content: center;
+	gap: 10px;
+	grid-template-rows: 10px 144px 10px 1fr 1fr 10px;
+	grid-template-columns: 10px 1fr 1fr 1fr 10px;
+	grid-template-areas: 
+	" . . . . . "
+	" . screen screen screen . "
+	" . . . . . "
+	" . dpad . ab . "
+	" . . selstart . . "
+	" . . . . . ";
+
+	border: 1px solid black;
+}
+
+
+#squaregb-screen {
+	grid-area: screen;
+	border: 1px solid black;
+	align-self: center;
+	justify-self: center;
+}
+
+#squaregb-dpad {
+	grid-area: dpad;
+	display: grid;
+	grid-template-areas:
+	  " . up . "
+	  " left . right "
+	  " . down . ";
+	grid-template-rows: 20px 20px 20px;
+	grid-template-columns: 20px 20px 20px;
+}
+
+#squaregb-up {
+	grid-area: up;
+
+}
+
+#squaregb-down {
+	grid-area: down;
+}
+
+#squaregb-left {
+	grid-area: left;
+}
+
+#squaregb-right {
+	grid-area: right;
+}
+
+#squaregb-ab {
+	display: grid;
+	grid-area: ab;
+
+	grid-template-areas: 
+	" . a "
+	" b . ";
+	grid-template-columns:  20px 20px;
+	grid-template-rows:  20px 20px;
+}
+
+#squaregb-a {
+	grid-area: a;
+
+}
+
+#squaregb-b {
+	grid-area: b;
+
+}
+
+#squaregb-selstart {
+	grid-area: selstart;
+}
+
