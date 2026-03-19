@@ -7,15 +7,9 @@ fn main() -> Result<(), JsValue> {
     let document = window.document().expect("No 'document' object on window");
     let _body = document.body().expect("No 'body' object on document");
 
-    let root = document
+    let _root = document
         .get_element_by_id("squaregb-root")
         .expect("No 'squaregb-root' element");
-
-    // let canvas = document.create_element("canvas").unwrap();
-    // canvas.set_id("squaregb-screen");
-    // canvas.set_attribute("width", "160")?;
-    // canvas.set_attribute("height", "144")?;
-    // root.append_child(&canvas)?;
 
     Ok(())
 }
