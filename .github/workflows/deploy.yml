@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Setup rust
-        run: sudo apt install rustup
+        run: sudo apt install rustup && rustup target add wasm32-unknown-unknown
       - uses: actions/checkout@v6
       - name: Build crate
         working-directory: ./squaregb
