@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Setup rust
-        run: sudo apt install rustup && rustup target add wasm32-unknown-unknown
+        run: sudo apt install rustup && rustup target add wasm32-unknown-unknown && cargo install -f wasm-bindgen-cli
       - uses: actions/checkout@v6
       - name: Build crate
         working-directory: ./squaregb
