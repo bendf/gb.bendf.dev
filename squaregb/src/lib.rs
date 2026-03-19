@@ -11,11 +11,11 @@ fn main() -> Result<(), JsValue> {
         .get_element_by_id("squaregb-root")
         .expect("No 'squaregb-root' element");
 
-    let canvas = document.create_element("canvas").unwrap();
-    canvas.set_id("squaregb-screen");
-    canvas.set_attribute("width", "160")?;
-    canvas.set_attribute("height", "144")?;
-    root.append_child(&canvas)?;
+    // let canvas = document.create_element("canvas").unwrap();
+    // canvas.set_id("squaregb-screen");
+    // canvas.set_attribute("width", "160")?;
+    // canvas.set_attribute("height", "144")?;
+    // root.append_child(&canvas)?;
 
     Ok(())
 }
@@ -24,3 +24,5 @@ fn main() -> Result<(), JsValue> {
 pub fn say_hello() -> String {
     return String::from("Hello, World!");
 }
+
+pub fn example() {}

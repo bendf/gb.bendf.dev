@@ -23,3 +23,16 @@ test("Renders gameboy-size canvas", async ({ page }) => {
   expect(await canvas.getAttribute("width")).toBe("160");
   expect(await canvas.getAttribute("height")).toBe("144");
 });
+
+test("Renders gameboy buttons", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.locator("#squaregb-up")).toBeVisible();
+  await expect(page.locator("#squaregb-down")).toBeVisible();
+  await expect(page.locator("#squaregb-left")).toBeVisible();
+  await expect(page.locator("#squaregb-right")).toBeVisible();
+  await expect(page.locator("#squaregb-a")).toBeVisible();
+  await expect(page.locator("#squaregb-b")).toBeVisible();
+  await expect(page.locator("#squaregb-select")).toBeVisible();
+  await expect(page.locator("#squaregb-start")).toBeVisible();
+});
