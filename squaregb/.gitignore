@@ -3,4 +3,4 @@ target
 
 
 # wasm-bindgen output
-# dist
+dist
