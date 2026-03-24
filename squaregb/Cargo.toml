@@ -20,3 +20,6 @@ features = [
 "HtmlElement",
 "Node"
 ]
+
+[dev-dependencies]
+rstest = "0.26.1"

@@ -1,4 +1,4 @@
-use arbitrary_int::{u2, u3};
+use arbitrary_int::{u2, u3, u5};
 use wasm_bindgen::prelude::*;
 use web_sys;
 
@@ -52,6 +52,8 @@ pub enum Instruction {
     LoadReg { src: Reg, dest: Reg },
     LoadImm { dest: Reg, imm: u8 },
     LoadIndirectHL { dest: Reg },
+    StoreIndirectHL { src: Reg },
+    StoreImmIndirectHL { imm: u8 },
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,13 +70,25 @@ impl Instruction {
 
         let b7_6: u8 = u2::extract_u8(*first_byte, 6).value();
         let b2_0: u8 = u3::extract_u8(*first_byte, 0).value();
+        let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
-        match (b7_6, b2_0) {
-            (0b01, 0b110) => {
+        match (first_byte, b7_3, b7_6, b2_0) {
+            (0b0011_0110, _, _, _) => {
+                let Some(imm) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::StoreImmIndirectHL { imm: *imm })
+            }
+            (_, 0b01110, _, _) => {
+                let src = u3::extract_u8(*first_byte, 0).value();
+                Ok(Instruction::StoreIndirectHL { src })
+            }
+            (_, _, 0b01, 0b110) => {
                 let dest = u3::extract_u8(*first_byte, 3).value();
                 Ok(Instruction::LoadIndirectHL { dest })
             }
-            (0b01, _) => {
+            (_, _, 0b01, _) => {
                 let dest = u3::extract_u8(*first_byte, 3).value();
                 let src = u3::extract_u8(*first_byte, 0).value();
 
@@ -83,17 +97,14 @@ impl Instruction {
                     dest: dest,
                 })
             }
-            (0b00, 0b110) => {
+            (_, _, 0b00, 0b110) => {
                 let dest = u3::extract_u8(*first_byte, 3).value();
 
-                let Some(second_byte) = memory.get(1) else {
+                let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
                 };
 
-                Ok(Instruction::LoadImm {
-                    dest,
-                    imm: *second_byte,
-                })
+                Ok(Instruction::LoadImm { dest, imm: *imm })
             }
             _ => Err(DecodeError::UnknownOpcode),
         }
@@ -103,6 +114,7 @@ impl Instruction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn it_decodes_load_reg_opcode() {
@@ -132,8 +144,37 @@ mod tests {
     }
 
     #[test]
-    fn it_fails_to_decode_garbage() {
-        let memory = [0b0000_0000];
+    fn it_decodes_store_indirect_hl_opcode() {
+        // 0b01110_xxx
+        let memory = [0b01110_111];
+        let decoded = Instruction::decode(&memory).expect("StoreIndirectHL should decode");
+
+        assert_eq!(decoded, Instruction::StoreIndirectHL { src: A });
+    }
+
+    #[test]
+    fn it_decodes_store_immediate_indirect_hl_opcode() {
+        // 0b0011_0110
+        let memory = [0b0011_0110, 0b0000_0001];
+        let decoded = Instruction::decode(&memory).expect("StoreImmediateIndirectHL should decode");
+
+        assert_eq!(decoded, Instruction::StoreImmIndirectHL { imm: 1 });
+    }
+
+    #[rstest]
+    #[case(0xD3)]
+    #[case(0xE3)]
+    #[case(0xE4)]
+    #[case(0xF4)]
+    #[case(0xDB)]
+    #[case(0xEB)]
+    #[case(0xEC)]
+    #[case(0xFC)]
+    #[case(0xDD)]
+    #[case(0xED)]
+    #[case(0xFD)]
+    fn it_fails_to_decode_invalid_opcodes(#[case] input: u8) {
+        let memory = [input];
         let decoded = Instruction::decode(&memory);
 
         assert!(decoded.is_err());
