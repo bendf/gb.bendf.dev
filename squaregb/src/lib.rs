@@ -64,6 +64,10 @@ pub enum Instruction {
     StoreAccIndirectC,
     LoadAccDirect8 { offset: u8 },
     StoreAccDirect8 { offset: u8 },
+    LoadAccIndirectHLDec,
+    StoreAccIndirectHLDec,
+    LoadAccIndirectHLInc,
+    StoreAccIndirectHLInc,
 }
 
 #[derive(Debug, PartialEq)]
@@ -83,6 +87,10 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b0010_1010, _, _, _) => Ok(Instruction::LoadAccIndirectHLInc),
+            (0b0010_0010, _, _, _) => Ok(Instruction::StoreAccIndirectHLInc),
+            (0b0011_1010, _, _, _) => Ok(Instruction::LoadAccIndirectHLDec),
+            (0b0011_0010, _, _, _) => Ok(Instruction::StoreAccIndirectHLDec),
             (0b1110_0000, _, _, _) => {
                 let Some(offset) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -299,6 +307,42 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("StoreAccDirect8 should decode");
 
         assert_eq!(decoded, Instruction::StoreAccDirect8 { offset: 1 });
+    }
+
+    #[test]
+    fn it_decodes_load_acc_indirect_hl_dec() {
+        //0b0011_1010
+        let memory = [0b0011_1010];
+        let decoded = Instruction::decode(&memory).expect("LoadAccIndirectHLDec should decode");
+
+        assert_eq!(decoded, Instruction::LoadAccIndirectHLDec);
+    }
+
+    #[test]
+    fn it_decodes_store_acc_indirect_hl_dec() {
+        //0b0011_0010
+        let memory = [0b0011_0010];
+        let decoded = Instruction::decode(&memory).expect("StoreAccIndirectHLDec should decode");
+
+        assert_eq!(decoded, Instruction::StoreAccIndirectHLDec);
+    }
+
+    #[test]
+    fn it_decodes_load_acc_indirect_hl_inc() {
+        // 0b0010_1010
+        let memory = [0b0010_1010];
+        let decoded = Instruction::decode(&memory).expect("LoadAccIndirectHLInc should decode");
+
+        assert_eq!(decoded, Instruction::LoadAccIndirectHLInc);
+    }
+
+    #[test]
+    fn it_decodes_store_acc_indirect_hl_inc() {
+        //0b0011_1010
+        let memory = [0b0010_0010];
+        let decoded = Instruction::decode(&memory).expect("LoadAccIndirectHLInc should decode");
+
+        assert_eq!(decoded, Instruction::StoreAccIndirectHLInc);
     }
 
     #[rstest]
