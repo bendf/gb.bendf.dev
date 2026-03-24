@@ -51,6 +51,7 @@ impl Machine {
 pub enum Instruction {
     LoadReg { src: Reg, dest: Reg },
     LoadImm { dest: Reg, imm: u8 },
+    LoadIndirectHL { dest: Reg },
 }
 
 #[derive(Debug, PartialEq)]
@@ -69,6 +70,10 @@ impl Instruction {
         let b2_0: u8 = u3::extract_u8(*first_byte, 0).value();
 
         match (b7_6, b2_0) {
+            (0b01, 0b110) => {
+                let dest = u3::extract_u8(*first_byte, 3).value();
+                Ok(Instruction::LoadIndirectHL { dest })
+            }
             (0b01, _) => {
                 let dest = u3::extract_u8(*first_byte, 3).value();
                 let src = u3::extract_u8(*first_byte, 0).value();
@@ -101,7 +106,8 @@ mod tests {
 
     #[test]
     fn it_decodes_load_reg_opcode() {
-        let memory = [0b0100_0001];
+        // 0b01_xxx_yyy
+        let memory = [0b01_000_001];
         let decoded = Instruction::decode(&memory).expect("LoadReg should decode");
 
         assert_eq!(decoded, Instruction::LoadReg { src: C, dest: B });
@@ -109,10 +115,20 @@ mod tests {
 
     #[test]
     fn it_decodes_load_imm_opcode() {
+        // 0b00_xxx_110, <1-byte imm>
         let memory = [0b00_111_110, 0b0000_0001];
         let decoded = Instruction::decode(&memory).expect("LoadImm should decode");
 
         assert_eq!(decoded, Instruction::LoadImm { dest: A, imm: 1 });
+    }
+
+    #[test]
+    fn it_decodes_load_indirect_hl_opcode() {
+        // 0b01_xxx_110
+        let memory = [0b01_000_110];
+        let decoded = Instruction::decode(&memory).expect("LoadIndirectHL should decode");
+
+        assert_eq!(decoded, Instruction::LoadIndirectHL { dest: B });
     }
 
     #[test]
