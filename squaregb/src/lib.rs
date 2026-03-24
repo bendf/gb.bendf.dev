@@ -58,6 +58,8 @@ pub enum Instruction {
     LoadAccIndirectDE,
     StoreAccIndirectBC,
     StoreAccIndirectDE,
+    LoadAcc { addr: u16 },
+    StoreAcc { addr: u16 },
 }
 
 #[derive(Debug, PartialEq)]
@@ -77,6 +79,26 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b1110_1010, _, _, _) => {
+                let Some(addr) = memory.get(1..3) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                // Unwrap safe here as we've guaranteed the range above.
+                let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+
+                Ok(Instruction::StoreAcc { addr })
+            }
+            (0b1111_1010, _, _, _) => {
+                let Some(addr) = memory.get(1..3) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                // Unwrap safe here as we've guaranteed the range above.
+                let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+
+                Ok(Instruction::LoadAcc { addr })
+            }
             (0b0001_0010, _, _, _) => Ok(Instruction::StoreAccIndirectDE),
             (0b0000_0010, _, _, _) => Ok(Instruction::StoreAccIndirectBC),
             (0b0001_1010, _, _, _) => Ok(Instruction::LoadAccIndirectDE),
@@ -205,6 +227,24 @@ mod tests {
         assert_eq!(decoded, Instruction::StoreAccIndirectDE {});
     }
 
+    #[test]
+    fn it_decodes_load_acc() {
+        //0b1111_1010
+        let memory = [0b1111_1010, 0b0000_1111, 0b1111_0000];
+        let decoded = Instruction::decode(&memory).expect("LoadAcc should decode");
+
+        assert_eq!(decoded, Instruction::LoadAcc { addr: 0xF00F });
+    }
+
+    #[test]
+    fn it_decodes_store_acc() {
+        //0b1110_1010
+        let memory = [0b1110_1010, 0b0000_1111, 0b1111_0000];
+        let decoded = Instruction::decode(&memory).expect("LoadAcc should decode");
+
+        assert_eq!(decoded, Instruction::StoreAcc { addr: 0xF00F });
+    }
+
     #[rstest]
     #[case(0xD3)]
     #[case(0xE3)]
@@ -237,6 +277,14 @@ mod tests {
     #[test]
     fn it_fails_to_decode_operand_out_of_bounds() {
         let memory: [u8; 1] = [0b00_111_110];
+
+        let decoded = Instruction::decode(&memory);
+
+        assert_eq!(decoded.unwrap_err(), DecodeError::MemoryOutOfBounds);
+    }
+    #[test]
+    fn it_fails_to_decode_two_byte_operand_out_of_bounds() {
+        let memory: [u8; 2] = [0b1111_1010, 0b0000_0000];
 
         let decoded = Instruction::decode(&memory);
 
