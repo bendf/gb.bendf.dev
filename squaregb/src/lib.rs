@@ -9,6 +9,8 @@ const HL: RegPair = 0b10;
 // Not stricty a Register pair.
 // TODO: Rename Regpair
 const AF: RegPair = 0b11;
+// Sometimes SP is used like this.
+const SP: RegPair = 0b11;
 
 type Reg = u8;
 const A: Reg = 0b111;
@@ -16,9 +18,10 @@ const B: Reg = 0b000;
 const C: Reg = 0b001;
 const D: Reg = 0b010;
 const E: Reg = 0b011;
-const F: Reg = 0b100;
-const H: Reg = 0b101;
-const L: Reg = 0b110;
+const H: Reg = 0b100;
+const L: Reg = 0b101;
+// F is flags register, so its a bit weird.
+const F: Reg = 0b110;
 
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
@@ -226,40 +229,48 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
-    #[test]
-    fn it_decodes_load_reg_opcode() {
+    #[rstest]
+    fn it_decodes_load_reg_opcode(
+        #[values(A, B, C, D, E, H, L)] src: u8,
+        #[values(A, B, C, D, E, H, L)] dest: u8,
+    ) {
         // 0b01_xxx_yyy
-        let memory = [0b01_000_001];
+        let opcode: u8 = 0b01_000_000 | (dest << 3) | src;
+
+        let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("LoadReg should decode");
 
-        assert_eq!(decoded, Instruction::LoadReg { src: C, dest: B });
+        assert_eq!(decoded, Instruction::LoadReg { src, dest });
     }
 
-    #[test]
-    fn it_decodes_load_imm_opcode() {
+    #[rstest]
+    fn it_decodes_load_imm_opcode(#[values(B, C, D, E, H, L, A)] dest: u8) {
         // 0b00_xxx_110, <1-byte imm>
-        let memory = [0b00_111_110, 0b0000_0001];
+        let opcode: u8 = 0b00_000_110 | (dest << 3);
+        let memory = [opcode, 0b0000_0001];
         let decoded = Instruction::decode(&memory).expect("LoadImm should decode");
 
-        assert_eq!(decoded, Instruction::LoadImm { dest: A, imm: 1 });
+        assert_eq!(decoded, Instruction::LoadImm { dest, imm: 1 });
     }
 
-    #[test]
-    fn it_decodes_load_indirect_hl_opcode() {
+    #[rstest]
+    fn it_decodes_load_indirect_hl_opcode(#[values(B, C, D, E, H, L, A)] dest: u8) {
         // 0b01_xxx_110
-        let memory = [0b01_000_110];
+        let opcode: u8 = 0b01_000_110 | (dest << 3);
+        let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("LoadIndirectHL should decode");
 
-        assert_eq!(decoded, Instruction::LoadIndirectHL { dest: B });
+        assert_eq!(decoded, Instruction::LoadIndirectHL { dest });
     }
 
-    #[test]
-    fn it_decodes_store_indirect_hl_opcode() {
+    #[rstest]
+    fn it_decodes_store_indirect_hl_opcode(#[values(B, C, D, E, H, L, A)] src: u8) {
         // 0b01110_xxx
-        let memory = [0b01110_111];
+        let opcode: u8 = 0b01110_000 | src;
+        let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("StoreIndirectHL should decode");
 
-        assert_eq!(decoded, Instruction::StoreIndirectHL { src: A });
+        assert_eq!(decoded, Instruction::StoreIndirectHL { src });
     }
 
     #[test]
@@ -397,19 +408,14 @@ mod tests {
         assert_eq!(decoded, Instruction::StoreAccIndirectHLInc);
     }
 
-    #[test]
-    fn it_decodes_load_imm_16() {
-        // 0b00xx0001
-        let memory = [0b00_11_0001, 0b1111_0000, 0b0000_1111];
+    #[rstest]
+    fn it_decodes_load_imm_16(#[values(BC, DE, HL, SP)] dest: u8) {
+        // 0b00_xx_0001
+        let opcode = 0b00_00_0001 + (dest << 4);
+        let memory = [opcode, 0b1111_0000, 0b0000_1111];
         let decoded = Instruction::decode(&memory).expect("LoadImm16 should decode");
 
-        assert_eq!(
-            decoded,
-            Instruction::LoadImm16 {
-                dest: AF,
-                imm: 0x0FF0
-            }
-        );
+        assert_eq!(decoded, Instruction::LoadImm16 { dest, imm: 0x0FF0 });
     }
 
     #[test]
@@ -430,22 +436,24 @@ mod tests {
         assert_eq!(decoded, Instruction::LoadSPHL);
     }
 
-    #[test]
-    fn it_decodes_push() {
+    #[rstest]
+    fn it_decodes_push(#[values(BC, DE, HL, AF)] src: u8) {
         // 0b11_xx_0101
-        let memory = [0b1100_0101];
+        let opcode = 0b11_00_0101 + (src << 4);
+        let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Push");
 
-        assert_eq!(decoded, Instruction::Push { src: BC });
+        assert_eq!(decoded, Instruction::Push { src });
     }
 
-    #[test]
-    fn it_decodes_pop() {
+    #[rstest]
+    fn it_decodes_pop(#[values(BC, DE, HL, AF)] dest: u8) {
         // 0b11_xx_0001
-        let memory = [0b1101_0001];
+        let opcode = 0b11_00_0001 + (dest << 4);
+        let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Pop");
 
-        assert_eq!(decoded, Instruction::Pop { dest: DE });
+        assert_eq!(decoded, Instruction::Pop { dest });
     }
 
     #[test]
