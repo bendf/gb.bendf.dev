@@ -2,6 +2,14 @@ use arbitrary_int::{u2, u3, u5};
 use wasm_bindgen::prelude::*;
 use web_sys;
 
+type RegPair = u8;
+const BC: RegPair = 0b00;
+const DE: RegPair = 0b01;
+const HL: RegPair = 0b10;
+// Not stricty a Register pair.
+// TODO: Rename Regpair
+const SP: RegPair = 0b11;
+
 type Reg = u8;
 const A: Reg = 0b111;
 const B: Reg = 0b000;
@@ -68,6 +76,9 @@ pub enum Instruction {
     StoreAccIndirectHLDec,
     LoadAccIndirectHLInc,
     StoreAccIndirectHLInc,
+    LoadImm16 { dest: RegPair, imm: u16 },
+    StoreSP16 { addr: u16 },
+    LoadSPHL,
 }
 
 #[derive(Debug, PartialEq)]
@@ -87,6 +98,27 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b1111_1001, _, _, _) => Ok(Instruction::LoadSPHL),
+            (0b0000_1000, _, _, _) => {
+                let Some(addr) = memory.get(1..3) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                // Unwrap safe here as we've guaranteed the range above.
+                let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+                Ok(Instruction::StoreSP16 { addr })
+            }
+            (0b00_00_0001 | 0b00_01_0001 | 0b00_10_0001 | 0b00_11_0001, _, _, _) => {
+                let Some(imm) = memory.get(1..3) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                // Unwrap safe here as we've guaranteed the range above.
+                let dest: u8 = u2::extract_u8(*first_byte, 4).value();
+                let imm: u16 = u16::from_le_bytes(imm.try_into().unwrap());
+
+                Ok(Instruction::LoadImm16 { dest, imm })
+            }
             (0b0010_1010, _, _, _) => Ok(Instruction::LoadAccIndirectHLInc),
             (0b0010_0010, _, _, _) => Ok(Instruction::StoreAccIndirectHLInc),
             (0b0011_1010, _, _, _) => Ok(Instruction::LoadAccIndirectHLDec),
@@ -343,6 +375,39 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("LoadAccIndirectHLInc should decode");
 
         assert_eq!(decoded, Instruction::StoreAccIndirectHLInc);
+    }
+
+    #[test]
+    fn it_decodes_load_imm_16() {
+        // 0b00xx0001
+        let memory = [0b00_11_0001, 0b1111_0000, 0b0000_1111];
+        let decoded = Instruction::decode(&memory).expect("LoadImm16 should decode");
+
+        assert_eq!(
+            decoded,
+            Instruction::LoadImm16 {
+                dest: SP,
+                imm: 0x0FF0
+            }
+        );
+    }
+
+    #[test]
+    fn it_decodes_store_sp_16() {
+        // 0b0000_1000
+        let memory = [0b0000_1000, 0b1111_0000, 0b0000_1111];
+        let decoded = Instruction::decode(&memory).expect("StoreSP16");
+
+        assert_eq!(decoded, Instruction::StoreSP16 { addr: 0x0FF0 });
+    }
+
+    #[test]
+    fn it_decodes_load_sp_hl() {
+        // 0b1111_1001
+        let memory = [0b1111_1001];
+        let decoded = Instruction::decode(&memory).expect("LoadSPHL");
+
+        assert_eq!(decoded, Instruction::LoadSPHL);
     }
 
     #[rstest]
