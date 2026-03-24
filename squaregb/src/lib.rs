@@ -54,6 +54,10 @@ pub enum Instruction {
     LoadIndirectHL { dest: Reg },
     StoreIndirectHL { src: Reg },
     StoreImmIndirectHL { imm: u8 },
+    LoadAccIndirectBC,
+    LoadAccIndirectDE,
+    StoreAccIndirectBC,
+    StoreAccIndirectDE,
 }
 
 #[derive(Debug, PartialEq)]
@@ -73,6 +77,10 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b0001_0010, _, _, _) => Ok(Instruction::StoreAccIndirectDE),
+            (0b0000_0010, _, _, _) => Ok(Instruction::StoreAccIndirectBC),
+            (0b0001_1010, _, _, _) => Ok(Instruction::LoadAccIndirectDE),
+            (0b0000_1010, _, _, _) => Ok(Instruction::LoadAccIndirectBC),
             (0b0011_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -159,6 +167,42 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("StoreImmediateIndirectHL should decode");
 
         assert_eq!(decoded, Instruction::StoreImmIndirectHL { imm: 1 });
+    }
+
+    #[test]
+    fn it_decodes_load_acc_indirect_bc_opcode() {
+        //0b0000_1010
+        let memory = [0b0000_1010];
+        let decoded = Instruction::decode(&memory).expect("LoadAccIndirectBC should decode");
+
+        assert_eq!(decoded, Instruction::LoadAccIndirectBC {});
+    }
+
+    #[test]
+    fn it_decodes_load_acc_indirect_de_opcode() {
+        //0b0001_1010
+        let memory = [0b0001_1010];
+        let decoded = Instruction::decode(&memory).expect("LoadAccIndirectDE should decode");
+
+        assert_eq!(decoded, Instruction::LoadAccIndirectDE {});
+    }
+
+    #[test]
+    fn it_decodes_store_acc_indirect_bc_opcode() {
+        //0b0000_0010
+        let memory = [0b0000_0010];
+        let decoded = Instruction::decode(&memory).expect("StoreAccIndirectBC should decode");
+
+        assert_eq!(decoded, Instruction::StoreAccIndirectBC {});
+    }
+
+    #[test]
+    fn it_decodes_store_acc_indirect_de_opcode() {
+        //0b0001_0010
+        let memory = [0b0001_0010];
+        let decoded = Instruction::decode(&memory).expect("StoreAccIndirectDE should decode");
+
+        assert_eq!(decoded, Instruction::StoreAccIndirectDE {});
     }
 
     #[rstest]
