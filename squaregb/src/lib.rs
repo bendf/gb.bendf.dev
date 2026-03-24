@@ -58,8 +58,8 @@ pub enum Instruction {
     LoadAccIndirectDE,
     StoreAccIndirectBC,
     StoreAccIndirectDE,
-    LoadAcc { addr: u16 },
-    StoreAcc { addr: u16 },
+    LoadAcc16 { addr: u16 },
+    StoreAcc16 { addr: u16 },
     LoadAccIndirectC,
     StoreAccIndirectC,
 }
@@ -91,7 +91,7 @@ impl Instruction {
                 // Unwrap safe here as we've guaranteed the range above.
                 let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
 
-                Ok(Instruction::StoreAcc { addr })
+                Ok(Instruction::StoreAcc16 { addr })
             }
             (0b1111_1010, _, _, _) => {
                 let Some(addr) = memory.get(1..3) else {
@@ -101,7 +101,7 @@ impl Instruction {
                 // Unwrap safe here as we've guaranteed the range above.
                 let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
 
-                Ok(Instruction::LoadAcc { addr })
+                Ok(Instruction::LoadAcc16 { addr })
             }
             (0b0001_0010, _, _, _) => Ok(Instruction::StoreAccIndirectDE),
             (0b0000_0010, _, _, _) => Ok(Instruction::StoreAccIndirectBC),
@@ -237,7 +237,7 @@ mod tests {
         let memory = [0b1111_1010, 0b0000_1111, 0b1111_0000];
         let decoded = Instruction::decode(&memory).expect("LoadAcc should decode");
 
-        assert_eq!(decoded, Instruction::LoadAcc { addr: 0xF00F });
+        assert_eq!(decoded, Instruction::LoadAcc16 { addr: 0xF00F });
     }
 
     #[test]
@@ -246,7 +246,7 @@ mod tests {
         let memory = [0b1110_1010, 0b0000_1111, 0b1111_0000];
         let decoded = Instruction::decode(&memory).expect("LoadAcc should decode");
 
-        assert_eq!(decoded, Instruction::StoreAcc { addr: 0xF00F });
+        assert_eq!(decoded, Instruction::StoreAcc16 { addr: 0xF00F });
     }
 
     #[test]
