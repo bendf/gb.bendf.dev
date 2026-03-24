@@ -85,6 +85,7 @@ pub enum Instruction {
     Push { src: RegPair },
     Pop { dest: RegPair },
     LoadHLSPOffset { offset: u8 },
+    Add8 { src: Reg },
 }
 
 #[derive(Debug, PartialEq)]
@@ -104,6 +105,10 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (_, 0b10000, _, _) => {
+                let src: u8 = u3::extract_u8(*first_byte, 0).value();
+                Ok(Instruction::Add8 { src })
+            }
             (0b1111_1000, _, _, _) => {
                 let Some(offset) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -463,6 +468,16 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("LoadHLSPOffset");
 
         assert_eq!(decoded, Instruction::LoadHLSPOffset { offset: 1 });
+    }
+
+    #[rstest]
+    fn it_decodes_add_8(#[values(B, C, D, E, H, L, A)] src: u8) {
+        // 0b10000_xxx
+        let opcode = 0b10000_000 + (src << 0);
+        let memory = [opcode];
+        let decoded = Instruction::decode(&memory).expect("Add8");
+
+        assert_eq!(decoded, Instruction::Add8 { src });
     }
 
     #[rstest]
