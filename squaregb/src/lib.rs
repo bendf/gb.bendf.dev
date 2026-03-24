@@ -97,6 +97,9 @@ pub enum Instruction {
     SubC8 { src: Reg },
     SubC8IndirectHL,
     SubCImm8 { imm: u8 },
+    Cmp8 { src: Reg },
+    Cmp8IndirectHL,
+    CmpImm8 { imm: u8 },
 }
 
 #[derive(Debug, PartialEq)]
@@ -116,6 +119,18 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b1111_1110, _, _, _) => {
+                let Some(imm) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::CmpImm8 { imm: *imm })
+            }
+            (0b1011_1110, _, _, _) => Ok(Instruction::Cmp8IndirectHL),
+            (_, 0b10111, _, _) => {
+                let src: u8 = u3::extract_u8(*first_byte, 0).value();
+                Ok(Instruction::Cmp8 { src })
+            }
             (0b1101_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -629,6 +644,33 @@ mod tests {
         let memory = [0b1101_1110, 0b0000_0001];
         let decoded = Instruction::decode(&memory).expect("SubCImm8");
         assert_eq!(decoded, Instruction::SubCImm8 { imm: 1 });
+    }
+
+    #[rstest]
+    fn it_decodes_cmp_8(#[values(B, C, D, E, H, L, A)] src: u8) {
+        // 0b10010_xxx
+        let opcode = 0b10111_000 + (src << 0);
+        let memory = [opcode];
+        let decoded = Instruction::decode(&memory).expect("Cmp8");
+
+        assert_eq!(decoded, Instruction::Cmp8 { src });
+    }
+
+    #[test]
+    fn it_decodes_cmp8_indirect_hl() {
+        // 0b1011_1110
+        let memory = [0b1011_1110];
+        let decoded = Instruction::decode(&memory).expect("Cmp8IndirectHL");
+
+        assert_eq!(decoded, Instruction::Cmp8IndirectHL);
+    }
+
+    #[test]
+    fn it_decodes_cmp_imm_8() {
+        //0b1111_1110
+        let memory = [0b1111_1110, 0b0000_0001];
+        let decoded = Instruction::decode(&memory).expect("CmpImm8");
+        assert_eq!(decoded, Instruction::CmpImm8 { imm: 1 });
     }
 
     #[rstest]
