@@ -8,7 +8,7 @@ const DE: RegPair = 0b01;
 const HL: RegPair = 0b10;
 // Not stricty a Register pair.
 // TODO: Rename Regpair
-const SP: RegPair = 0b11;
+const AF: RegPair = 0b11;
 
 type Reg = u8;
 const A: Reg = 0b111;
@@ -79,6 +79,9 @@ pub enum Instruction {
     LoadImm16 { dest: RegPair, imm: u16 },
     StoreSP16 { addr: u16 },
     LoadSPHL,
+    Push { src: RegPair },
+    Pop { dest: RegPair },
+    LoadHLSPOffset { offset: u8 },
 }
 
 #[derive(Debug, PartialEq)]
@@ -98,6 +101,23 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b1111_1000, _, _, _) => {
+                let Some(offset) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::LoadHLSPOffset { offset: *offset })
+            }
+            (0b11_00_0001 | 0b11_01_0001 | 0b11_10_0001 | 0b11_11_0001, _, _, _) => {
+                let dest: u8 = u2::extract_u8(*first_byte, 4).value();
+
+                Ok(Instruction::Pop { dest })
+            }
+            (0b11_00_0101 | 0b11_01_0101 | 0b11_10_0101 | 0b11_11_0101, _, _, _) => {
+                let src: u8 = u2::extract_u8(*first_byte, 4).value();
+
+                Ok(Instruction::Push { src })
+            }
             (0b1111_1001, _, _, _) => Ok(Instruction::LoadSPHL),
             (0b0000_1000, _, _, _) => {
                 let Some(addr) = memory.get(1..3) else {
@@ -386,7 +406,7 @@ mod tests {
         assert_eq!(
             decoded,
             Instruction::LoadImm16 {
-                dest: SP,
+                dest: AF,
                 imm: 0x0FF0
             }
         );
@@ -408,6 +428,33 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("LoadSPHL");
 
         assert_eq!(decoded, Instruction::LoadSPHL);
+    }
+
+    #[test]
+    fn it_decodes_push() {
+        // 0b11_xx_0101
+        let memory = [0b1100_0101];
+        let decoded = Instruction::decode(&memory).expect("Push");
+
+        assert_eq!(decoded, Instruction::Push { src: BC });
+    }
+
+    #[test]
+    fn it_decodes_pop() {
+        // 0b11_xx_0001
+        let memory = [0b1101_0001];
+        let decoded = Instruction::decode(&memory).expect("Pop");
+
+        assert_eq!(decoded, Instruction::Pop { dest: DE });
+    }
+
+    #[test]
+    fn it_decodes_load_hl_sp_offset() {
+        // 0b1111_1000
+        let memory = [0b1111_1000, 0b0000_0001];
+        let decoded = Instruction::decode(&memory).expect("LoadHLSPOffset");
+
+        assert_eq!(decoded, Instruction::LoadHLSPOffset { offset: 1 });
     }
 
     #[rstest]
