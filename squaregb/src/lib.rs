@@ -60,6 +60,8 @@ pub enum Instruction {
     StoreAccIndirectDE,
     LoadAcc { addr: u16 },
     StoreAcc { addr: u16 },
+    LoadAccIndirectC,
+    StoreAccIndirectC,
 }
 
 #[derive(Debug, PartialEq)]
@@ -79,6 +81,8 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b1110_0010, _, _, _) => Ok(Instruction::StoreAccIndirectC),
+            (0b1111_0010, _, _, _) => Ok(Instruction::LoadAccIndirectC),
             (0b1110_1010, _, _, _) => {
                 let Some(addr) = memory.get(1..3) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -243,6 +247,24 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("LoadAcc should decode");
 
         assert_eq!(decoded, Instruction::StoreAcc { addr: 0xF00F });
+    }
+
+    #[test]
+    fn it_decodes_load_acc_indirect_c() {
+        //0b1111_00010
+        let memory = [0b1111_0010];
+        let decoded = Instruction::decode(&memory).expect("LoadAccIndirectC should decode");
+
+        assert_eq!(decoded, Instruction::LoadAccIndirectC);
+    }
+
+    #[test]
+    fn it_decodes_store_acc_indirect_c() {
+        //0b1110_0010
+        let memory = [0b1110_0010];
+        let decoded = Instruction::decode(&memory).expect("StoreAccIndirectC should decode");
+
+        assert_eq!(decoded, Instruction::StoreAccIndirectC);
     }
 
     #[rstest]
