@@ -86,6 +86,11 @@ pub enum Instruction {
     Pop { dest: RegPair },
     LoadHLSPOffset { offset: u8 },
     Add8 { src: Reg },
+    Add8IndirectHL,
+    AddImm8 { imm: u8 },
+    AddC8 { src: Reg },
+    AddC8IndirectHL,
+    AddCImm8 { imm: u8 },
 }
 
 #[derive(Debug, PartialEq)]
@@ -105,6 +110,26 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b1100_1110, _, _, _) => {
+                let Some(imm) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::AddCImm8 { imm: *imm })
+            }
+            (0b1000_1110, _, _, _) => Ok(Instruction::AddC8IndirectHL),
+            (_, 0b10001, _, _) => {
+                let src: u8 = u3::extract_u8(*first_byte, 0).value();
+                Ok(Instruction::AddC8 { src })
+            }
+            (0b1100_0110, _, _, _) => {
+                let Some(imm) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::AddImm8 { imm: *imm })
+            }
+            (0b1000_0110, _, _, _) => Ok(Instruction::Add8IndirectHL),
             (_, 0b10000, _, _) => {
                 let src: u8 = u3::extract_u8(*first_byte, 0).value();
                 Ok(Instruction::Add8 { src })
@@ -478,6 +503,49 @@ mod tests {
         let decoded = Instruction::decode(&memory).expect("Add8");
 
         assert_eq!(decoded, Instruction::Add8 { src });
+    }
+
+    #[test]
+    fn it_decodes_add8_indirect_hl() {
+        // 0b1000_0110
+        let memory = [0b1000_0110];
+        let decoded = Instruction::decode(&memory).expect("Add8IndirectHL");
+
+        assert_eq!(decoded, Instruction::Add8IndirectHL);
+    }
+
+    #[test]
+    fn it_decodes_add_imm_8() {
+        //0b1100_0110
+        let memory = [0b1100_0110, 0b0000_0001];
+        let decoded = Instruction::decode(&memory).expect("AddImm8");
+        assert_eq!(decoded, Instruction::AddImm8 { imm: 1 });
+    }
+
+    #[rstest]
+    fn it_decodes_addc_8(#[values(B, C, D, E, H, L, A)] src: u8) {
+        //0b10001_xxx
+        let opcode = 0b10001_000 + src;
+        let memory = [opcode];
+        let decoded = Instruction::decode(&memory).expect("AddC8");
+        assert_eq!(decoded, Instruction::AddC8 { src });
+    }
+
+    #[test]
+    fn it_decodes_addc8_indirect_hl() {
+        // 0b1000_1110
+        let memory = [0b1000_1110];
+        let decoded = Instruction::decode(&memory).expect("AddC8IndirectHL");
+
+        assert_eq!(decoded, Instruction::AddC8IndirectHL);
+    }
+
+    #[test]
+    fn it_decodes_addc_imm_8() {
+        //0b1100_0110
+        let memory = [0b1100_1110, 0b0000_0001];
+        let decoded = Instruction::decode(&memory).expect("AddCImm8");
+        assert_eq!(decoded, Instruction::AddCImm8 { imm: 1 });
     }
 
     #[rstest]
