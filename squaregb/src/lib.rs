@@ -1,4 +1,5 @@
 use arbitrary_int::{u2, u3, u5};
+use std::mem::transmute;
 use wasm_bindgen::prelude::*;
 use web_sys;
 
@@ -22,6 +23,13 @@ const H: Reg = 0b100;
 const L: Reg = 0b101;
 // F is flags register, so its a bit weird.
 const F: Reg = 0b110;
+
+// Encoded conditions
+type Cond = u8;
+const NZ: Cond = 0b00;
+const NCARRY: Cond = 0b10;
+const Z: Cond = 0b01;
+const CARRY: Cond = 0b11;
 
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
@@ -147,6 +155,22 @@ pub enum Instruction {
     RESIndirectHL { bit: u8 },
     SET { src: Reg, bit: u8 },
     SETIndirectHL { bit: u8 },
+    JP { addr: u16 },
+    JPHL,
+    JPCC { cond: Cond, addr: u16 },
+    JR { offset: i8 },
+    JRCC { cond: Cond, offset: i8 },
+    Call { addr: u16 },
+    CallCC { cond: Cond, addr: u16 },
+    Ret,
+    RetCC { cond: Cond },
+    RetI,
+    RST { addr: u8 },
+    Halt,
+    Stop,
+    DI,
+    EI,
+    NOP,
 }
 
 #[derive(Debug, PartialEq)]
@@ -162,12 +186,85 @@ impl Instruction {
         };
 
         let b7_6: u8 = u2::extract_u8(*first_byte, 6).value();
+        let b7_5: u8 = u3::extract_u8(*first_byte, 5).value();
         let b2_0: u8 = u3::extract_u8(*first_byte, 0).value();
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
         let b5_3: u8 = u3::extract_u8(*first_byte, 3).value();
         let b5_4: u8 = u2::extract_u8(*first_byte, 4).value();
+        let b4_3: u8 = u2::extract_u8(*first_byte, 3).value();
+
+        if b7_6 == 0b11 && b2_0 == 0b111 {
+            // RST
+            return Ok(Instruction::RST { addr: b5_3 << 3 });
+        }
+
+        if b7_5 == 0b110 && b2_0 == 0b000 {
+            // RetCC
+            return Ok(Instruction::RetCC { cond: b4_3 });
+        }
+
+        if b7_5 == 0b110 && b2_0 == 0b100 {
+            // CallCC
+            let Some(addr) = memory.get(1..3) else {
+                return Err(DecodeError::MemoryOutOfBounds);
+            };
+
+            // Unwrap safe here as we've guaranteed the range above.
+            let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+            return Ok(Instruction::CallCC { cond: b4_3, addr });
+        }
+
+        if b7_5 == 0b001 && b2_0 == 0b000 {
+            //JRCC
+            let Some(offset) = memory.get(1) else {
+                return Err(DecodeError::MemoryOutOfBounds);
+            };
+
+            return Ok(Instruction::JRCC {
+                cond: b4_3,
+                offset: offset.cast_signed(),
+            });
+        }
+
+        if b7_5 == 0b110 && b2_0 == 0b10 {
+            // JPCC
+            let Some(addr) = memory.get(1..3) else {
+                return Err(DecodeError::MemoryOutOfBounds);
+            };
+
+            // Unwrap safe here as we've guaranteed the range above.
+            let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+            return Ok(Instruction::JPCC { cond: b4_3, addr });
+        }
 
         match (first_byte, b7_3, b7_6, b2_0) {
+            (0b0000_0000, _, _, _) => Ok(Instruction::NOP),
+            (0b1111_1011, _, _, _) => Ok(Instruction::EI),
+            (0b1111_0011, _, _, _) => Ok(Instruction::DI),
+            (0b0001_0000, _, _, _) => Ok(Instruction::Stop),
+            (0b0111_0110, _, _, _) => Ok(Instruction::Halt),
+            (0b1101_1001, _, _, _) => Ok(Instruction::RetI),
+            (0b1100_1001, _, _, _) => Ok(Instruction::Ret),
+            (0b1100_1101, _, _, _) => {
+                let Some(addr) = memory.get(1..3) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                // Unwrap safe here as we've guaranteed the range above.
+                let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+                return Ok(Instruction::Call { addr });
+            }
+
+            (0b0001_1000, _, _, _) => {
+                let Some(offset) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::JR {
+                    offset: offset.cast_signed(),
+                })
+            }
+            (0b1110_1001, _, _, _) => Ok(Instruction::JPHL),
             (0xCB, _, _, _) => {
                 let Some(prefixed_opcode) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -237,6 +334,15 @@ impl Instruction {
                 }
             }
 
+            (0b1100_0011, _, _, _) => {
+                let Some(addr) = memory.get(1..3) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                // Unwrap safe here as we've guaranteed the range above.
+                let addr: u16 = u16::from_le_bytes(addr.try_into().unwrap());
+                Ok(Instruction::JP { addr })
+            }
             (0b0001_1111, _, _, _) => Ok(Instruction::RRA),
             (0b0001_0111, _, _, _) => Ok(Instruction::RLA),
             (0b0000_1111, _, _, _) => Ok(Instruction::RRCA),
@@ -1229,6 +1335,143 @@ mod tests {
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("SETIndirectHL");
         assert_eq!(decoded, Instruction::SETIndirectHL { bit });
+    }
+
+    #[test]
+    fn it_decodes_jp() {
+        //0b1100_0011
+        let memory = [0b1100_0011, 0xF0, 0x0F];
+        let decoded = Instruction::decode(&memory).expect("JP");
+        assert_eq!(decoded, Instruction::JP { addr: 0x0FF0 });
+    }
+
+    #[test]
+    fn it_decodes_jp_hl() {
+        //0b1110_1001
+        let memory = [0b1110_1001];
+        let decoded = Instruction::decode(&memory).expect("JPHL");
+        assert_eq!(decoded, Instruction::JPHL);
+    }
+
+    #[rstest]
+    fn it_decodes_jpcc(#[values(NZ, NCARRY, Z, CARRY)] cond: u8) {
+        //0b110_xx_010
+        let opcode = 0b110_00_010 + (cond << 3);
+        let memory = [opcode, 0xF0, 0x0F];
+        let decoded = Instruction::decode(&memory).expect("JPCC");
+        assert_eq!(decoded, Instruction::JPCC { cond, addr: 0x0FF0 });
+    }
+
+    #[test]
+    fn it_decodes_jr() {
+        //0b0001_1000
+        let memory = [0b0001_1000, 0xff];
+        let decoded = Instruction::decode(&memory).expect("JR");
+        // 0xff (u8) is reinterpreted as -1 (i8)
+        assert_eq!(decoded, Instruction::JR { offset: -0x01 });
+    }
+
+    #[rstest]
+    fn it_decodes_jrcc(#[values(NZ, NCARRY, Z, CARRY)] cond: u8) {
+        //0b001_xx_000
+        let opcode = 0b001_00_000 + (cond << 3);
+        let memory = [opcode, 0xFF];
+        let decoded = Instruction::decode(&memory).expect("JRCC");
+        assert_eq!(decoded, Instruction::JRCC { cond, offset: -0x1 });
+    }
+
+    #[test]
+    fn it_decodes_call() {
+        //0b1100_1101
+        let memory = [0b1100_1101, 0xF0, 0x0F];
+        let decoded = Instruction::decode(&memory).expect("Call");
+        assert_eq!(decoded, Instruction::Call { addr: 0x0FF0 });
+    }
+
+    #[rstest]
+    fn it_decodes_callcc(#[values(NZ, NCARRY, Z, CARRY)] cond: u8) {
+        //0b110_xx_100
+        let opcode = 0b110_00_100 + (cond << 3);
+        let memory = [opcode, 0xF0, 0x0F];
+        let decoded = Instruction::decode(&memory).expect("CallCC");
+        assert_eq!(decoded, Instruction::CallCC { cond, addr: 0x0FF0 });
+    }
+
+    #[test]
+    fn it_decodes_ret() {
+        //0b1100_1001
+        let memory = [0b1100_1001];
+        let decoded = Instruction::decode(&memory).expect("Ret");
+        assert_eq!(decoded, Instruction::Ret);
+    }
+
+    #[rstest]
+    fn it_decodes_retcc(#[values(NZ, NCARRY, Z, CARRY)] cond: u8) {
+        //0b110_xx_000
+        let opcode = 0b110_00_000 + (cond << 3);
+        let memory = [opcode];
+        let decoded = Instruction::decode(&memory).expect("RetCC");
+        assert_eq!(decoded, Instruction::RetCC { cond });
+    }
+
+    #[test]
+    fn it_decodes_reti() {
+        //0b1101_1001
+        let memory = [0b1101_1001];
+        let decoded = Instruction::decode(&memory).expect("RetI");
+        assert_eq!(decoded, Instruction::RetI);
+    }
+
+    #[rstest]
+    fn it_decodes_rst(#[values(0, 1, 2, 3, 4, 5, 6, 7)] addr: u8) {
+        //0b11_xxx_111
+        let opcode = 0b11_000_111 + (addr << 3);
+        let memory = [opcode];
+        let decoded = Instruction::decode(&memory).expect("RST");
+        // Bit shift address by 3
+        assert_eq!(decoded, Instruction::RST { addr: addr << 3 });
+    }
+
+    #[test]
+    fn it_decodes_halt() {
+        //0b0111_0110
+
+        let opcode = 0b0111_0110;
+        let memory = [opcode];
+        let decoded = Instruction::decode(&memory).expect("Halt");
+        assert_eq!(decoded, Instruction::Halt);
+    }
+
+    #[test]
+    fn it_decodes_stop() {
+        //0b0001_0000
+        let memory = [0b0001_0000];
+        let decoded = Instruction::decode(&memory).expect("Stop");
+        assert_eq!(decoded, Instruction::Stop);
+    }
+
+    #[test]
+    fn it_decodes_di() {
+        //0b1111_0011
+        let memory = [0b1111_0011];
+        let decoded = Instruction::decode(&memory).expect("DI");
+        assert_eq!(decoded, Instruction::DI);
+    }
+
+    #[test]
+    fn it_decodes_ei() {
+        //0b1111_1011
+        let memory = [0b1111_1011];
+        let decoded = Instruction::decode(&memory).expect("EI");
+        assert_eq!(decoded, Instruction::EI);
+    }
+
+    #[test]
+    fn it_decodes_nop() {
+        //0b0000_0000
+        let memory = [0b0000_0000];
+        let decoded = Instruction::decode(&memory).expect("NOP");
+        assert_eq!(decoded, Instruction::NOP);
     }
 
     #[rstest]
