@@ -113,10 +113,10 @@ pub enum Instruction {
     Xor8 { src: Reg },
     Xor8IndirectHL,
     XorImm8 { imm: u8 },
-    CCF,
-    SCF,
-    DAA,
-    CPL,
+    CmplCarryFlag,
+    SetCarryFlag,
+    DecAdjAcc,
+    CmplAcc,
 }
 
 #[derive(Debug, PartialEq)]
@@ -136,10 +136,10 @@ impl Instruction {
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
-            (0b0010_1111, _, _, _) => Ok(Instruction::CPL),
-            (0b0010_0111, _, _, _) => Ok(Instruction::DAA),
-            (0b0011_0111, _, _, _) => Ok(Instruction::SCF),
-            (0b0011_1111, _, _, _) => Ok(Instruction::CCF),
+            (0b0010_1111, _, _, _) => Ok(Instruction::CmplAcc),
+            (0b0010_0111, _, _, _) => Ok(Instruction::DecAdjAcc),
+            (0b0011_0111, _, _, _) => Ok(Instruction::SetCarryFlag),
+            (0b0011_1111, _, _, _) => Ok(Instruction::CmplCarryFlag),
             (0b1110_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -862,7 +862,7 @@ mod tests {
         //0b0011_1111
         let memory = [0b0011_1111];
         let decoded = Instruction::decode(&memory).expect("CCF");
-        assert_eq!(decoded, Instruction::CCF);
+        assert_eq!(decoded, Instruction::CmplCarryFlag);
     }
 
     #[test]
@@ -870,7 +870,7 @@ mod tests {
         //0b0011_0111
         let memory = [0b0011_0111];
         let decoded = Instruction::decode(&memory).expect("SCF");
-        assert_eq!(decoded, Instruction::SCF);
+        assert_eq!(decoded, Instruction::SetCarryFlag);
     }
 
     #[test]
@@ -878,7 +878,7 @@ mod tests {
         //0b0010_0111
         let memory = [0b0010_0111];
         let decoded = Instruction::decode(&memory).expect("DAA");
-        assert_eq!(decoded, Instruction::DAA);
+        assert_eq!(decoded, Instruction::DecAdjAcc);
     }
 
     #[test]
@@ -886,7 +886,7 @@ mod tests {
         //0b0010_1111
         let memory = [0b0010_1111];
         let decoded = Instruction::decode(&memory).expect("CPL");
-        assert_eq!(decoded, Instruction::CPL);
+        assert_eq!(decoded, Instruction::CmplAcc);
     }
 
     #[rstest]
