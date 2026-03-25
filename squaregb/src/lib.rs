@@ -92,7 +92,7 @@ pub enum Instruction {
     LoadSPHL,
     Push { src: RegPair },
     Pop { dest: RegPair },
-    LoadHLSPOffset { offset: u8 },
+    LoadHLSPOffset { offset: i8 },
     Add8 { src: Reg },
     Add8IndirectHL,
     AddImm8 { imm: u8 },
@@ -128,7 +128,7 @@ pub enum Instruction {
     Inc16 { src: RegPair },
     Dec16 { src: RegPair },
     Add16HL { src: RegPair },
-    AddSPImm8 { imm: u8 },
+    AddSPImm8 { imm: i8 },
     RLCA,
     RRCA,
     RLA,
@@ -167,7 +167,7 @@ pub enum Instruction {
     RetI,
     RST { addr: u8 },
     Halt,
-    Stop,
+    Stop { ignore: u8 },
     DI,
     EI,
     NOP,
@@ -241,7 +241,13 @@ impl Instruction {
             (0b0000_0000, _, _, _) => Ok(Instruction::NOP),
             (0b1111_1011, _, _, _) => Ok(Instruction::EI),
             (0b1111_0011, _, _, _) => Ok(Instruction::DI),
-            (0b0001_0000, _, _, _) => Ok(Instruction::Stop),
+            (0b0001_0000, _, _, _) => {
+                let Some(ignore) = memory.get(1) else {
+                    return Err(DecodeError::MemoryOutOfBounds);
+                };
+
+                Ok(Instruction::Stop { ignore: *ignore })
+            }
             (0b0111_0110, _, _, _) => Ok(Instruction::Halt),
             (0b1101_1001, _, _, _) => Ok(Instruction::RetI),
             (0b1100_1001, _, _, _) => Ok(Instruction::Ret),
@@ -352,7 +358,9 @@ impl Instruction {
                     return Err(DecodeError::MemoryOutOfBounds);
                 };
 
-                Ok(Instruction::AddSPImm8 { imm: *imm })
+                Ok(Instruction::AddSPImm8 {
+                    imm: imm.cast_signed(),
+                })
             }
             (0b00_00_1001 | 0b00_01_1001 | 0b00_10_1001 | 0b00_11_1001, _, _, _) => {
                 Ok(Instruction::Add16HL { src: b5_4 })
@@ -448,7 +456,9 @@ impl Instruction {
                     return Err(DecodeError::MemoryOutOfBounds);
                 };
 
-                Ok(Instruction::LoadHLSPOffset { offset: *offset })
+                Ok(Instruction::LoadHLSPOffset {
+                    offset: offset.cast_signed(),
+                })
             }
             (0b11_00_0001 | 0b11_01_0001 | 0b11_10_0001 | 0b11_11_0001, _, _, _) => {
                 Ok(Instruction::Pop { dest: b5_4 })
@@ -1445,9 +1455,9 @@ mod tests {
     #[test]
     fn it_decodes_stop() {
         //0b0001_0000
-        let memory = [0b0001_0000];
+        let memory = [0b0001_0000, 0x01];
         let decoded = Instruction::decode(&memory).expect("Stop");
-        assert_eq!(decoded, Instruction::Stop);
+        assert_eq!(decoded, Instruction::Stop { ignore: 0x01 });
     }
 
     #[test]
@@ -1518,5 +1528,27 @@ mod tests {
         let decoded = Instruction::decode(&memory);
 
         assert_eq!(decoded.unwrap_err(), DecodeError::MemoryOutOfBounds);
+    }
+
+    #[test]
+    fn it_covers_all_opcodes() {
+        let invalid_opcodes = [
+            0xD3, 0xE3, 0xE4, 0xF4, 0xDB, 0xEB, 0xEC, 0xFC, 0xDD, 0xED, 0xFD,
+        ];
+        for opcode in 0..=0xFF {
+            if invalid_opcodes.contains(&opcode) {
+                continue;
+            }
+            let memory = [opcode, 0xFF, 0xFF];
+            let decoded = Instruction::decode(&memory);
+
+            assert!(decoded.is_ok());
+        }
+        for opcode in 0..=0xFF {
+            let memory = [0xCB, opcode, 0xFF, 0xFF];
+            let decoded = Instruction::decode(&memory);
+
+            assert!(decoded.is_ok());
+        }
     }
 }
