@@ -100,6 +100,10 @@ impl Machine {
                 self.set_reg(dest, value);
                 self.inc_pc();
             }
+            LoadImm { dest, imm } => {
+                self.set_reg(dest, imm);
+                self.inc_pc();
+            }
             _ => todo!("Missing instruction exec"),
         }
     }
@@ -1598,7 +1602,7 @@ mod exec_tests {
     use rstest::rstest;
 
     #[rstest]
-    fn it_execs_load(
+    fn it_execs_load_reg(
         #[values(B, C, D, E, H, L, A)] src: u8,
         #[values(B, C, D, E, H, L, A)] dest: u8,
     ) {
@@ -1614,6 +1618,23 @@ mod exec_tests {
         machine.exec(ins);
 
         assert_eq!(machine.get_reg(src), machine.get_reg(dest));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_load_imm8(
+        #[values(B, C, D, E, H, L, A)] dest: u8,
+        #[values(0x00, 0x01, 0xFE, 0xFF)] imm: u8,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(0x00);
+        machine.set_reg(dest, 0x00);
+
+        let ins = Instruction::LoadImm { imm, dest };
+        machine.exec(ins);
+
+        assert_eq!(imm, machine.get_reg(dest));
         assert_eq!(machine.get_pc(), 0x01);
     }
 }
