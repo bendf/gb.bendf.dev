@@ -1,5 +1,4 @@
 use arbitrary_int::{u2, u3, u5};
-use std::mem::transmute;
 use wasm_bindgen::prelude::*;
 use web_sys;
 
@@ -49,20 +48,60 @@ pub fn say_hello() -> String {
     return String::from("Hello, World!");
 }
 
-pub struct Machine {}
+pub struct Machine {
+    pc: u16,
+    gp_registers: [u8; 8],
+}
 
 impl Machine {
     pub fn new() -> Self {
-        Machine {}
+        Machine {
+            pc: 0,
+            gp_registers: [0; 8],
+        }
     }
 
     pub fn set_rom(&self, _rom: &[u8]) {}
-    pub fn set_pc(&self, _addr: u16) {}
+    pub fn set_pc(&mut self, addr: u16) {
+        self.pc = addr;
+    }
 
     pub fn eval(&self, _steps: usize) {}
 
-    pub fn get_reg_a(&self) -> u8 {
-        0xFF
+    pub fn get_reg(&self, reg: u8) -> u8 {
+        if (reg > 8) {
+            panic!("Invalid Register");
+        } else {
+            self.gp_registers[reg as usize]
+        }
+    }
+
+    pub fn set_reg(&mut self, reg: u8, value: u8) {
+        if (reg > 8) {
+            panic!("Invalid Register");
+        } else {
+            self.gp_registers[reg as usize] = value;
+        }
+    }
+
+    pub fn get_pc(&self) -> u16 {
+        return self.pc;
+    }
+
+    pub fn inc_pc(&mut self) {
+        self.pc = self.pc + 1
+    }
+
+    pub fn exec(&mut self, instruction: Instruction) {
+        use Instruction::*;
+        match instruction {
+            LoadReg { src, dest } => {
+                let value = self.get_reg(src);
+                self.set_reg(dest, value);
+                self.inc_pc();
+            }
+            _ => todo!("Missing instruction exec"),
+        }
     }
 }
 
@@ -559,7 +598,7 @@ impl Instruction {
 }
 
 #[cfg(test)]
-mod tests {
+mod decode_tests {
     use super::*;
     use rstest::rstest;
 
@@ -1550,5 +1589,31 @@ mod tests {
 
             assert!(decoded.is_ok());
         }
+    }
+}
+
+#[cfg(test)]
+mod exec_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    fn it_execs_load(
+        #[values(B, C, D, E, H, L, A)] src: u8,
+        #[values(B, C, D, E, H, L, A)] dest: u8,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(0x00);
+
+        machine.set_reg(src, 0xFF);
+        machine.set_reg(dest, 0x0C);
+
+        let ins = Instruction::LoadReg { src, dest };
+
+        machine.exec(ins);
+
+        assert_eq!(machine.get_reg(src), machine.get_reg(dest));
+        assert_eq!(machine.get_pc(), 0x01);
     }
 }
