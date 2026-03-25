@@ -134,6 +134,8 @@ impl Instruction {
         let b7_6: u8 = u2::extract_u8(*first_byte, 6).value();
         let b2_0: u8 = u3::extract_u8(*first_byte, 0).value();
         let b7_3: u8 = u5::extract_u8(*first_byte, 3).value();
+        let b5_3: u8 = u3::extract_u8(*first_byte, 3).value();
+        let b5_4: u8 = u2::extract_u8(*first_byte, 4).value();
 
         match (first_byte, b7_3, b7_6, b2_0) {
             (0b0010_1111, _, _, _) => Ok(Instruction::CmplAcc),
@@ -148,10 +150,7 @@ impl Instruction {
                 Ok(Instruction::XorImm8 { imm: *imm })
             }
             (0b1010_1110, _, _, _) => Ok(Instruction::Xor8IndirectHL),
-            (_, 0b10101, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::Xor8 { src })
-            }
+            (_, 0b10101, _, _) => Ok(Instruction::Xor8 { src: b2_0 }),
             (0b1111_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -160,10 +159,7 @@ impl Instruction {
                 Ok(Instruction::OrImm8 { imm: *imm })
             }
             (0b1011_0110, _, _, _) => Ok(Instruction::Or8IndirectHL),
-            (_, 0b10110, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::Or8 { src })
-            }
+            (_, 0b10110, _, _) => Ok(Instruction::Or8 { src: b2_0 }),
             (0b1110_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -172,20 +168,11 @@ impl Instruction {
                 Ok(Instruction::AndImm8 { imm: *imm })
             }
             (0b1010_0110, _, _, _) => Ok(Instruction::And8IndirectHL),
-            (_, 0b10100, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::And8 { src })
-            }
+            (_, 0b10100, _, _) => Ok(Instruction::And8 { src: b2_0 }),
             (0b0011_0101, _, _, _) => Ok(Instruction::Dec8IndirectHL),
-            (_, _, 0b00, 0b101) => {
-                let src: u8 = u3::extract_u8(*first_byte, 3).value();
-                Ok(Instruction::Dec8 { src })
-            }
+            (_, _, 0b00, 0b101) => Ok(Instruction::Dec8 { src: b5_3 }),
             (0b0011_0100, _, _, _) => Ok(Instruction::Inc8IndirectHL),
-            (_, _, 0b00, 0b100) => {
-                let src: u8 = u3::extract_u8(*first_byte, 3).value();
-                Ok(Instruction::Inc8 { src })
-            }
+            (_, _, 0b00, 0b100) => Ok(Instruction::Inc8 { src: b5_3 }),
             (0b1111_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -194,10 +181,7 @@ impl Instruction {
                 Ok(Instruction::CmpImm8 { imm: *imm })
             }
             (0b1011_1110, _, _, _) => Ok(Instruction::Cmp8IndirectHL),
-            (_, 0b10111, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::Cmp8 { src })
-            }
+            (_, 0b10111, _, _) => Ok(Instruction::Cmp8 { src: b2_0 }),
             (0b1101_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -206,10 +190,7 @@ impl Instruction {
                 Ok(Instruction::SubCImm8 { imm: *imm })
             }
             (0b1001_1110, _, _, _) => Ok(Instruction::SubC8IndirectHL),
-            (_, 0b10011, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::SubC8 { src })
-            }
+            (_, 0b10011, _, _) => Ok(Instruction::SubC8 { src: b2_0 }),
             (0b1101_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -218,10 +199,7 @@ impl Instruction {
                 Ok(Instruction::SubImm8 { imm: *imm })
             }
             (0b1001_0110, _, _, _) => Ok(Instruction::Sub8IndirectHL),
-            (_, 0b10010, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::Sub8 { src })
-            }
+            (_, 0b10010, _, _) => Ok(Instruction::Sub8 { src: b2_0 }),
             (0b1100_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -230,10 +208,7 @@ impl Instruction {
                 Ok(Instruction::AddCImm8 { imm: *imm })
             }
             (0b1000_1110, _, _, _) => Ok(Instruction::AddC8IndirectHL),
-            (_, 0b10001, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::AddC8 { src })
-            }
+            (_, 0b10001, _, _) => Ok(Instruction::AddC8 { src: b2_0 }),
             (0b1100_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -242,10 +217,7 @@ impl Instruction {
                 Ok(Instruction::AddImm8 { imm: *imm })
             }
             (0b1000_0110, _, _, _) => Ok(Instruction::Add8IndirectHL),
-            (_, 0b10000, _, _) => {
-                let src: u8 = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::Add8 { src })
-            }
+            (_, 0b10000, _, _) => Ok(Instruction::Add8 { src: b2_0 }),
             (0b1111_1000, _, _, _) => {
                 let Some(offset) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -254,14 +226,10 @@ impl Instruction {
                 Ok(Instruction::LoadHLSPOffset { offset: *offset })
             }
             (0b11_00_0001 | 0b11_01_0001 | 0b11_10_0001 | 0b11_11_0001, _, _, _) => {
-                let dest: u8 = u2::extract_u8(*first_byte, 4).value();
-
-                Ok(Instruction::Pop { dest })
+                Ok(Instruction::Pop { dest: b5_4 })
             }
             (0b11_00_0101 | 0b11_01_0101 | 0b11_10_0101 | 0b11_11_0101, _, _, _) => {
-                let src: u8 = u2::extract_u8(*first_byte, 4).value();
-
-                Ok(Instruction::Push { src })
+                Ok(Instruction::Push { src: b5_4 })
             }
             (0b1111_1001, _, _, _) => Ok(Instruction::LoadSPHL),
             (0b0000_1000, _, _, _) => {
@@ -279,10 +247,9 @@ impl Instruction {
                 };
 
                 // Unwrap safe here as we've guaranteed the range above.
-                let dest: u8 = u2::extract_u8(*first_byte, 4).value();
                 let imm: u16 = u16::from_le_bytes(imm.try_into().unwrap());
 
-                Ok(Instruction::LoadImm16 { dest, imm })
+                Ok(Instruction::LoadImm16 { dest: b5_4, imm })
             }
             (0b0010_1010, _, _, _) => Ok(Instruction::LoadAccIndirectHLInc),
             (0b0010_0010, _, _, _) => Ok(Instruction::StoreAccIndirectHLInc),
@@ -335,31 +302,21 @@ impl Instruction {
 
                 Ok(Instruction::StoreImmIndirectHL { imm: *imm })
             }
-            (_, 0b01110, _, _) => {
-                let src = u3::extract_u8(*first_byte, 0).value();
-                Ok(Instruction::StoreIndirectHL { src })
-            }
-            (_, _, 0b01, 0b110) => {
-                let dest = u3::extract_u8(*first_byte, 3).value();
-                Ok(Instruction::LoadIndirectHL { dest })
-            }
-            (_, _, 0b01, _) => {
-                let dest = u3::extract_u8(*first_byte, 3).value();
-                let src = u3::extract_u8(*first_byte, 0).value();
-
-                Ok(Instruction::LoadReg {
-                    src: src,
-                    dest: dest,
-                })
-            }
+            (_, 0b01110, _, _) => Ok(Instruction::StoreIndirectHL { src: b2_0 }),
+            (_, _, 0b01, 0b110) => Ok(Instruction::LoadIndirectHL { dest: b5_3 }),
+            (_, _, 0b01, _) => Ok(Instruction::LoadReg {
+                src: b2_0,
+                dest: b5_3,
+            }),
             (_, _, 0b00, 0b110) => {
-                let dest = u3::extract_u8(*first_byte, 3).value();
-
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
                 };
 
-                Ok(Instruction::LoadImm { dest, imm: *imm })
+                Ok(Instruction::LoadImm {
+                    dest: b5_3,
+                    imm: *imm,
+                })
             }
             _ => Err(DecodeError::UnknownOpcode),
         }
