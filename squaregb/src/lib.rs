@@ -73,7 +73,7 @@ impl Machine {
 
     pub fn eval(&self, _steps: usize) {}
 
-    pub fn get_reg(&self, reg: u8) -> u8 {
+    pub fn get_r8(&self, reg: u8) -> u8 {
         if (reg > 8) {
             panic!("Invalid Register");
         } else {
@@ -81,7 +81,7 @@ impl Machine {
         }
     }
 
-    pub fn get_reg_pair(&self, reg_pair: RegPair) -> u16 {
+    pub fn get_r16(&self, reg_pair: RegPair) -> u16 {
         match reg_pair {
             BC => {
                 u16::from_be_bytes([self.gp_registers[B as usize], self.gp_registers[C as usize]])
@@ -146,7 +146,7 @@ impl Machine {
         use Instruction::*;
         match instruction {
             LoadReg8 { src, dest } => {
-                let value = self.get_reg(src);
+                let value = self.get_r8(src);
                 self.set_r8(dest, value);
                 self.inc_pc();
             }
@@ -155,7 +155,7 @@ impl Machine {
                 self.inc_pc();
             }
             LoadIndirectHL { dest } => {
-                let addr = self.get_reg_pair(HL);
+                let addr = self.get_r16(HL);
                 let value = self.get_mem8(addr);
                 self.set_r8(dest, value);
                 self.inc_pc();
@@ -1667,8 +1667,8 @@ mod machine_tests {
 
         machine.set_r16(pair, 0xABCD);
 
-        assert_eq!(machine.get_reg(h_reg), 0xAB);
-        assert_eq!(machine.get_reg(l_reg), 0xCD);
+        assert_eq!(machine.get_r8(h_reg), 0xAB);
+        assert_eq!(machine.get_r8(l_reg), 0xCD);
     }
 
     fn it_gets_reg_pairs() {}
@@ -1698,7 +1698,7 @@ mod exec_tests {
 
         machine.exec(ins);
 
-        assert_eq!(machine.get_reg(src), machine.get_reg(dest));
+        assert_eq!(machine.get_r8(src), machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x01);
     }
 
@@ -1715,7 +1715,7 @@ mod exec_tests {
         let ins = Instruction::LoadImm8 { imm, dest };
         machine.exec(ins);
 
-        assert_eq!(imm, machine.get_reg(dest));
+        assert_eq!(imm, machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x01);
     }
 
@@ -1732,7 +1732,7 @@ mod exec_tests {
         let ins = Instruction::LoadIndirectHL { dest };
         machine.exec(ins);
 
-        assert_eq!(0xFE, machine.get_reg(dest));
+        assert_eq!(0xFE, machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x01);
     }
 }
