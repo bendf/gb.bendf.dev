@@ -13,7 +13,7 @@ const AF: RegPair = 0b11;
 const SP: RegPair = 0b11;
 
 type Reg = u8;
-const A: Reg = 0b111;
+pub const A: Reg = 0b111;
 const B: Reg = 0b000;
 const C: Reg = 0b001;
 const D: Reg = 0b010;
@@ -51,6 +51,7 @@ pub fn say_hello() -> String {
 pub struct Machine {
     pc: u16,
     gp_registers: [u8; 8],
+    memory: [u8; 65536],
 }
 
 impl Machine {
@@ -58,10 +59,14 @@ impl Machine {
         Machine {
             pc: 0,
             gp_registers: [0; 8],
+            memory: [0; 65536],
         }
     }
 
-    pub fn set_rom(&self, _rom: &[u8]) {}
+    pub fn set_memory(&mut self, start: usize, mem: &[u8]) {
+        let end = start + mem.len();
+        self.memory[start..end].copy_from_slice(mem);
+    }
     pub fn set_pc(&mut self, addr: u16) {
         self.pc = addr;
     }
@@ -76,11 +81,56 @@ impl Machine {
         }
     }
 
-    pub fn set_reg(&mut self, reg: u8, value: u8) {
+    pub fn get_reg_pair(&self, reg_pair: RegPair) -> u16 {
+        match reg_pair {
+            BC => {
+                u16::from_be_bytes([self.gp_registers[B as usize], self.gp_registers[C as usize]])
+            }
+            DE => {
+                u16::from_be_bytes([self.gp_registers[D as usize], self.gp_registers[E as usize]])
+            }
+            HL => {
+                u16::from_be_bytes([self.gp_registers[H as usize], self.gp_registers[L as usize]])
+            }
+            AF => {
+                u16::from_be_bytes([self.gp_registers[A as usize], self.gp_registers[F as usize]])
+            }
+            _ => panic!("Unknown register pair"),
+        }
+    }
+
+    pub fn get_mem8(&self, addr: u16) -> u8 {
+        self.memory[addr as usize]
+    }
+
+    pub fn set_r8(&mut self, reg: u8, value: u8) {
         if (reg > 8) {
             panic!("Invalid Register");
         } else {
             self.gp_registers[reg as usize] = value;
+        }
+    }
+
+    pub fn set_r16(&mut self, reg_pair: RegPair, value: u16) {
+        let [low, high] = value.to_le_bytes();
+        match reg_pair {
+            0b00 => {
+                self.set_r8(B, high);
+                self.set_r8(C, low);
+            }
+            0b01 => {
+                self.set_r8(D, high);
+                self.set_r8(E, low);
+            }
+            0b10 => {
+                self.set_r8(H, high);
+                self.set_r8(L, low);
+            }
+            0b11 => {
+                self.set_r8(A, high);
+                self.set_r8(F, low);
+            }
+            _ => panic!("Invalid RegPair"),
         }
     }
 
@@ -95,13 +145,19 @@ impl Machine {
     pub fn exec(&mut self, instruction: Instruction) {
         use Instruction::*;
         match instruction {
-            LoadReg { src, dest } => {
+            LoadReg8 { src, dest } => {
                 let value = self.get_reg(src);
-                self.set_reg(dest, value);
+                self.set_r8(dest, value);
                 self.inc_pc();
             }
-            LoadImm { dest, imm } => {
-                self.set_reg(dest, imm);
+            LoadImm8 { dest, imm } => {
+                self.set_r8(dest, imm);
+                self.inc_pc();
+            }
+            LoadIndirectHL { dest } => {
+                let addr = self.get_reg_pair(HL);
+                let value = self.get_mem8(addr);
+                self.set_r8(dest, value);
                 self.inc_pc();
             }
             _ => todo!("Missing instruction exec"),
@@ -111,8 +167,8 @@ impl Machine {
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
-    LoadReg { src: Reg, dest: Reg },
-    LoadImm { dest: Reg, imm: u8 },
+    LoadReg8 { src: Reg, dest: Reg },
+    LoadImm8 { dest: Reg, imm: u8 },
     LoadIndirectHL { dest: Reg },
     StoreIndirectHL { src: Reg },
     StoreImmIndirectHL { imm: u8 },
@@ -582,7 +638,7 @@ impl Instruction {
             }
             (_, 0b01110, _, _) => Ok(Instruction::StoreIndirectHL { src: b2_0 }),
             (_, _, 0b01, 0b110) => Ok(Instruction::LoadIndirectHL { dest: b5_3 }),
-            (_, _, 0b01, _) => Ok(Instruction::LoadReg {
+            (_, _, 0b01, _) => Ok(Instruction::LoadReg8 {
                 src: b2_0,
                 dest: b5_3,
             }),
@@ -591,7 +647,7 @@ impl Instruction {
                     return Err(DecodeError::MemoryOutOfBounds);
                 };
 
-                Ok(Instruction::LoadImm {
+                Ok(Instruction::LoadImm8 {
                     dest: b5_3,
                     imm: *imm,
                 })
@@ -617,7 +673,7 @@ mod decode_tests {
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("LoadReg should decode");
 
-        assert_eq!(decoded, Instruction::LoadReg { src, dest });
+        assert_eq!(decoded, Instruction::LoadReg8 { src, dest });
     }
 
     #[rstest]
@@ -627,7 +683,7 @@ mod decode_tests {
         let memory = [opcode, 0b0000_0001];
         let decoded = Instruction::decode(&memory).expect("LoadImm should decode");
 
-        assert_eq!(decoded, Instruction::LoadImm { dest, imm: 1 });
+        assert_eq!(decoded, Instruction::LoadImm8 { dest, imm: 1 });
     }
 
     #[rstest]
@@ -1597,6 +1653,31 @@ mod decode_tests {
 }
 
 #[cfg(test)]
+mod machine_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(BC, B, C)]
+    #[case(DE, D, E)]
+    #[case(HL, H, L)]
+    #[case(AF, A, F)]
+    fn it_sets_reg_pairs(#[case] pair: RegPair, #[case] h_reg: Reg, #[case] l_reg: Reg) {
+        let mut machine = Machine::new();
+
+        machine.set_r16(pair, 0xABCD);
+
+        assert_eq!(machine.get_reg(h_reg), 0xAB);
+        assert_eq!(machine.get_reg(l_reg), 0xCD);
+    }
+
+    fn it_gets_reg_pairs() {}
+
+    #[rstest]
+    fn it_panics_on_invalid_reg_pair() {}
+}
+
+#[cfg(test)]
 mod exec_tests {
     use super::*;
     use rstest::rstest;
@@ -1610,10 +1691,10 @@ mod exec_tests {
 
         machine.set_pc(0x00);
 
-        machine.set_reg(src, 0xFF);
-        machine.set_reg(dest, 0x0C);
+        machine.set_r8(src, 0xFF);
+        machine.set_r8(dest, 0x0C);
 
-        let ins = Instruction::LoadReg { src, dest };
+        let ins = Instruction::LoadReg8 { src, dest };
 
         machine.exec(ins);
 
@@ -1629,12 +1710,29 @@ mod exec_tests {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
-        machine.set_reg(dest, 0x00);
+        machine.set_r8(dest, 0x00);
 
-        let ins = Instruction::LoadImm { imm, dest };
+        let ins = Instruction::LoadImm8 { imm, dest };
         machine.exec(ins);
 
         assert_eq!(imm, machine.get_reg(dest));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_load_indirect_hl_8(#[values(B, C, D, E, H, L, A)] dest: u8) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(0x00);
+        machine.set_r8(dest, 0x00);
+        machine.set_r16(HL, 0x0001);
+
+        machine.set_memory(1, &[0xFE]);
+
+        let ins = Instruction::LoadIndirectHL { dest };
+        machine.exec(ins);
+
+        assert_eq!(0xFE, machine.get_reg(dest));
         assert_eq!(machine.get_pc(), 0x01);
     }
 }
