@@ -203,6 +203,10 @@ impl Machine {
         self.memory[addr as usize]
     }
 
+    pub fn set_mem8(&mut self, addr: u16, value: u8) {
+        self.memory[addr as usize] = value;
+    }
+
     pub fn set_r8(&mut self, reg: R8, value: u8) {
         self.gp_registers[reg as usize] = value;
     }
@@ -242,6 +246,10 @@ impl Machine {
         self.pc = self.pc + 1
     }
 
+    pub fn adv_pc(&mut self, offset: u16) {
+        self.pc = self.pc + offset
+    }
+
     pub fn exec(&mut self, instruction: Instruction) {
         use Instruction::*;
         match instruction {
@@ -259,6 +267,125 @@ impl Machine {
                 let value = self.get_mem8(addr);
                 self.set_r8(dest, value);
                 self.inc_pc();
+            }
+            StoreIndirectHL { src } => {
+                let addr = self.get_r16(R16::HL);
+                let value = self.get_r8(src);
+
+                self.set_mem8(addr, value);
+                self.inc_pc();
+            }
+            StoreImmIndirectHL { imm } => {
+                let addr = self.get_r16(R16::HL);
+
+                self.set_mem8(addr, imm);
+                self.adv_pc(2)
+            }
+            LoadAccIndirectBC => {
+                let addr = self.get_r16(R16::BC);
+
+                let value = self.get_mem8(addr);
+
+                self.set_r8(A, value);
+                self.inc_pc();
+            }
+            LoadAccIndirectDE => {
+                let addr = self.get_r16(R16::DE);
+
+                let value = self.get_mem8(addr);
+
+                self.set_r8(A, value);
+                self.inc_pc();
+            }
+            StoreAccIndirectBC => {
+                let addr = self.get_r16(R16::BC);
+                let value = self.get_r8(A);
+
+                self.set_mem8(addr, value);
+                self.inc_pc();
+            }
+            StoreAccIndirectDE => {
+                let addr = self.get_r16(R16::DE);
+                let value = self.get_r8(A);
+
+                self.set_mem8(addr, value);
+                self.inc_pc();
+            }
+            LoadAcc16 { addr } => {
+                let value = self.get_mem8(addr);
+
+                self.set_r8(A, value);
+                self.adv_pc(3);
+            }
+            StoreAcc16 { addr } => {
+                let value = self.get_r8(A);
+
+                self.set_mem8(addr, value);
+                self.adv_pc(3);
+            }
+            LoadAccIndirectC => {
+                let base: u16 = 0xFF00;
+                let offset = self.get_r8(C);
+                let addr = base + (offset as u16);
+                let value = self.get_mem8(addr);
+                self.set_r8(A, value);
+                self.inc_pc();
+            }
+            StoreAccIndirectC => {
+                let base: u16 = 0xFF00;
+                let offset = self.get_r8(C);
+                let addr = base + (offset as u16);
+                let value = self.get_r8(A);
+                self.set_mem8(addr, value);
+                self.inc_pc();
+            }
+            LoadAccDirect8 { offset } => {
+                let base: u16 = 0xFF00;
+                let addr = base + (offset as u16);
+                let value = self.get_mem8(addr);
+                self.set_r8(A, value);
+                self.inc_pc();
+            }
+            StoreAccDirect8 { offset } => {
+                let base: u16 = 0xFF00;
+                let addr = base + (offset as u16);
+                let value = self.get_r8(A);
+                self.set_mem8(addr, value);
+                self.inc_pc();
+            }
+            LoadAccIndirectHLDec => {
+                let addr = self.get_r16(R16::HL);
+
+                let value = self.get_mem8(addr);
+
+                self.set_r8(A, value);
+                self.inc_pc();
+                self.set_r16(R16::HL, addr - 1);
+            }
+            StoreAccIndirectHLDec => {
+                let addr = self.get_r16(R16::HL);
+                let value = self.get_r8(A);
+
+                self.set_mem8(addr, value);
+                self.inc_pc();
+                self.set_r16(R16::HL, addr - 1);
+            }
+            LoadAccIndirectHLInc => {
+                let addr = self.get_r16(R16::HL);
+
+                let value = self.get_mem8(addr);
+
+                self.set_r8(A, value);
+                self.inc_pc();
+                self.set_r16(R16::HL, addr + 1);
+            }
+            StoreAccIndirectHLInc => {
+                let addr = self.get_r16(R16::HL);
+                let value = self.get_r8(A);
+
+                self.set_mem8(addr, value);
+                self.inc_pc();
+                self.set_r16(R16::HL, addr + 1);
             }
             _ => todo!("Missing instruction exec"),
         }
@@ -1884,5 +2011,301 @@ mod exec_tests {
 
         assert_eq!(0xFE, machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_store_indirect_hl_8(#[values(B, C, D, E, A)] src: R8) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(0x00);
+        machine.set_r8(src, 0xFE);
+        machine.set_r16(R16::HL, 0x0001);
+
+        machine.set_memory(1, &[0x00]);
+
+        let ins = Instruction::StoreIndirectHL { src };
+        machine.exec(ins);
+
+        assert_eq!(0xFE, machine.get_mem8(0x0001));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_store_imm_indirect_hl_8(#[values(0x01, 0xFF)] imm: u8) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(0x00);
+        machine.set_r16(R16::HL, 0x0001);
+
+        machine.set_memory(1, &[0x00]);
+
+        let ins = Instruction::StoreImmIndirectHL { imm };
+        machine.exec(ins);
+
+        assert_eq!(imm, machine.get_mem8(0x0001));
+        assert_eq!(machine.get_pc(), 0x02);
+    }
+    #[test]
+    fn it_execs_load_acc_indirect_bc() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, 0x0);
+        machine.set_r16(R16::BC, 0x0001);
+
+        machine.set_memory(1, &[value]);
+
+        let ins = Instruction::LoadAccIndirectBC;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[test]
+    fn it_execs_load_acc_indirect_de() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, 0x0);
+        machine.set_r16(R16::DE, 0x0001);
+
+        machine.set_memory(1, &[value]);
+
+        let ins = Instruction::LoadAccIndirectDE;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[test]
+    fn it_execs_store_acc_indirect_bc() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+        machine.set_r16(R16::BC, 0x0001);
+        machine.set_memory(1, &[0x00]);
+
+        let ins = Instruction::StoreAccIndirectBC;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(0x0001));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[test]
+    fn it_execs_store_acc_indirect_de() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+        machine.set_r16(R16::DE, 0x0001);
+        machine.set_memory(1, &[0x00]);
+
+        let ins = Instruction::StoreAccIndirectDE;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(0x0001));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_load_acc_16(#[values(0x0001, 0xFFFF)] addr: u16) {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_memory(addr as usize, &[value]);
+
+        let ins = Instruction::LoadAcc16 { addr };
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x03);
+    }
+    #[rstest]
+    fn it_execs_store_acc_16(#[values(0x0001, 0xFFFF)] addr: u16) {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+        machine.set_memory(addr as usize, &[0x00]);
+
+        let ins = Instruction::StoreAcc16 { addr };
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(addr));
+        assert_eq!(machine.get_pc(), 0x03);
+    }
+    #[rstest]
+    fn it_execs_load_acc_indirect_c(#[values(0x01, 0xFF)] offset: u8) {
+        let mut machine = Machine::new();
+
+        let base: u16 = 0xFF00;
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+
+        machine.set_r8(A, 0x00);
+        machine.set_r8(C, offset);
+
+        let addr: u16 = base + (offset as u16);
+        machine.set_memory(addr as usize, &[value]);
+
+        let ins = Instruction::LoadAccIndirectC;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+    #[rstest]
+    fn it_execs_store_acc_indirect_c(#[values(0x01, 0xFF)] offset: u8) {
+        let mut machine = Machine::new();
+
+        let base: u16 = 0xFF00;
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+
+        machine.set_r8(A, value);
+        machine.set_r8(C, offset);
+
+        let addr: u16 = base + (offset as u16);
+        machine.set_memory(addr as usize, &[0x00]);
+
+        let ins = Instruction::StoreAccIndirectC;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(addr));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_load_acc_direct_8(#[values(0x01, 0xFF)] offset: u8) {
+        let mut machine = Machine::new();
+
+        let base: u16 = 0xFF00;
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+
+        let addr: u16 = base + (offset as u16);
+        machine.set_memory(addr as usize, &[value]);
+
+        let ins = Instruction::LoadAccDirect8 { offset };
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[rstest]
+    fn it_execs_store_acc_direct_8(#[values(0x01, 0xFF)] offset: u8) {
+        let mut machine = Machine::new();
+
+        let base: u16 = 0xFF00;
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+
+        let addr: u16 = base + (offset as u16);
+        machine.set_memory(addr as usize, &[0x00]);
+
+        let ins = Instruction::StoreAccDirect8 { offset };
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(addr));
+        assert_eq!(machine.get_pc(), 0x01);
+    }
+
+    #[test]
+    fn it_execs_load_acc_indirect_hl_dec() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, 0x0);
+        machine.set_r16(R16::HL, 0x0001);
+
+        machine.set_memory(1, &[value]);
+
+        let ins = Instruction::LoadAccIndirectHLDec;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(0x00, machine.get_r16(R16::HL));
+    }
+
+    #[test]
+    fn it_execs_store_acc_indirect_dec() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+        machine.set_r16(R16::HL, 0x0001);
+        machine.set_memory(1, &[0x00]);
+
+        let ins = Instruction::StoreAccIndirectHLDec;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(0x0001));
+        assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(0x00, machine.get_r16(R16::HL));
+    }
+    #[test]
+    fn it_execs_load_acc_indirect_hl_inc() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, 0x0);
+        machine.set_r16(R16::HL, 0x0001);
+
+        machine.set_memory(1, &[value]);
+
+        let ins = Instruction::LoadAccIndirectHLInc;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r8(A));
+        assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(0x02, machine.get_r16(R16::HL));
+    }
+
+    #[test]
+    fn it_execs_store_acc_indirect_inc() {
+        let mut machine = Machine::new();
+
+        let value = 0xFE;
+
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+        machine.set_r16(R16::HL, 0x0001);
+        machine.set_memory(1, &[0x00]);
+
+        let ins = Instruction::StoreAccIndirectHLInc;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem8(0x0001));
+        assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(0x02, machine.get_r16(R16::HL));
     }
 }
