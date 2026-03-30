@@ -46,7 +46,7 @@ impl Into<u8> for R16 {
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[repr(u8)]
-pub enum Reg {
+pub enum R8 {
     B = 0b000,
     C = 0b001,
     D = 0b010,
@@ -57,7 +57,7 @@ pub enum Reg {
     A = 0b111,
 }
 
-impl Reg {
+impl R8 {
     pub fn new(id: u3) -> Self {
         match id.value() {
             0b000 => B,
@@ -75,13 +75,13 @@ impl Reg {
     }
 }
 
-impl Into<u8> for Reg {
+impl Into<u8> for R8 {
     fn into(self) -> u8 {
         self as u8
     }
 }
 
-use Reg::*;
+use R8::*;
 
 // pub const A: Reg = 0b111;
 // const B: Reg = 0b000;
@@ -177,7 +177,7 @@ impl Machine {
 
     pub fn eval(&self, _steps: usize) {}
 
-    pub fn get_r8(&self, reg: Reg) -> u8 {
+    pub fn get_r8(&self, reg: R8) -> u8 {
         self.gp_registers[reg as usize]
     }
 
@@ -203,7 +203,7 @@ impl Machine {
         self.memory[addr as usize]
     }
 
-    pub fn set_r8(&mut self, reg: Reg, value: u8) {
+    pub fn set_r8(&mut self, reg: R8, value: u8) {
         self.gp_registers[reg as usize] = value;
     }
 
@@ -267,10 +267,10 @@ impl Machine {
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
-    LoadReg8 { src: Reg, dest: Reg },
-    LoadImm8 { dest: Reg, imm: u8 },
-    LoadIndirectHL { dest: Reg },
-    StoreIndirectHL { src: Reg },
+    LoadReg8 { src: R8, dest: R8 },
+    LoadImm8 { dest: R8, imm: u8 },
+    LoadIndirectHL { dest: R8 },
+    StoreIndirectHL { src: R8 },
     StoreImmIndirectHL { imm: u8 },
     LoadAccIndirectBC,
     LoadAccIndirectDE,
@@ -292,32 +292,32 @@ pub enum Instruction {
     Push { src: R16 },
     Pop { dest: R16 },
     LoadHLSPOffset { offset: i8 },
-    Add8 { src: Reg },
+    Add8 { src: R8 },
     Add8IndirectHL,
     AddImm8 { imm: u8 },
-    AddC8 { src: Reg },
+    AddC8 { src: R8 },
     AddC8IndirectHL,
     AddCImm8 { imm: u8 },
-    Sub8 { src: Reg },
+    Sub8 { src: R8 },
     Sub8IndirectHL,
     SubImm8 { imm: u8 },
-    SubC8 { src: Reg },
+    SubC8 { src: R8 },
     SubC8IndirectHL,
     SubCImm8 { imm: u8 },
-    Cmp8 { src: Reg },
+    Cmp8 { src: R8 },
     Cmp8IndirectHL,
     CmpImm8 { imm: u8 },
-    Inc8 { src: Reg },
+    Inc8 { src: R8 },
     Inc8IndirectHL,
-    Dec8 { src: Reg },
+    Dec8 { src: R8 },
     Dec8IndirectHL,
-    And8 { src: Reg },
+    And8 { src: R8 },
     And8IndirectHL,
     AndImm8 { imm: u8 },
-    Or8 { src: Reg },
+    Or8 { src: R8 },
     Or8IndirectHL,
     OrImm8 { imm: u8 },
-    Xor8 { src: Reg },
+    Xor8 { src: R8 },
     Xor8IndirectHL,
     XorImm8 { imm: u8 },
     CmplCarryFlag,
@@ -332,27 +332,27 @@ pub enum Instruction {
     RRCA,
     RLA,
     RRA,
-    RLC { src: Reg },
+    RLC { src: R8 },
     RLCIndirectHL,
-    RRC { src: Reg },
+    RRC { src: R8 },
     RRCIndirectHL,
-    RL { src: Reg },
+    RL { src: R8 },
     RLIndirectHL,
-    RR { src: Reg },
+    RR { src: R8 },
     RRIndirectHL,
-    SLA { src: Reg },
+    SLA { src: R8 },
     SLAIndirectHL,
-    SRA { src: Reg },
+    SRA { src: R8 },
     SRAIndirectHL,
-    Swap { src: Reg },
+    Swap { src: R8 },
     SwapIndirectHL,
-    SRL { src: Reg },
+    SRL { src: R8 },
     SRLIndirectHL,
-    BIT { src: Reg, bit: u8 },
+    BIT { src: R8, bit: u8 },
     BITIndirectHL { bit: u8 },
-    RES { src: Reg, bit: u8 },
+    RES { src: R8, bit: u8 },
     RESIndirectHL { bit: u8 },
-    SET { src: Reg, bit: u8 },
+    SET { src: R8, bit: u8 },
     SETIndirectHL { bit: u8 },
     JP { addr: u16 },
     JPHL,
@@ -497,7 +497,7 @@ impl Instruction {
                             return Ok(Instruction::SETIndirectHL { bit: b6_4 });
                         } else {
                             return Ok(Instruction::SET {
-                                src: Reg::new(b2_0),
+                                src: R8::new(b2_0),
                                 bit: b6_4,
                             });
                         }
@@ -507,7 +507,7 @@ impl Instruction {
                             return Ok(Instruction::RESIndirectHL { bit: b6_4 });
                         } else {
                             return Ok(Instruction::RES {
-                                src: Reg::new(b2_0),
+                                src: R8::new(b2_0),
                                 bit: b6_4,
                             });
                         }
@@ -517,7 +517,7 @@ impl Instruction {
                             return Ok(Instruction::BITIndirectHL { bit: b6_4 });
                         } else {
                             return Ok(Instruction::BIT {
-                                src: Reg::new(b2_0),
+                                src: R8::new(b2_0),
                                 bit: b6_4,
                             });
                         }
@@ -527,39 +527,39 @@ impl Instruction {
                     }
                 }
 
-                match (prefixed_opcode, b7_3, Reg::new(b2_0)) {
+                match (prefixed_opcode, b7_3, R8::new(b2_0)) {
                     (0b0011_1110, _, _) => Ok(Instruction::SRLIndirectHL),
-                    (_, 0b0011_1, B | C | D | E | H | L | A) => Ok(Instruction::SRL {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0011_1, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::SRL { src: R8::new(b2_0) })
+                    }
                     (0b0011_0110, _, _) => Ok(Instruction::SwapIndirectHL),
-                    (_, 0b0011_0, B | C | D | E | H | L | A) => Ok(Instruction::Swap {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0011_0, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::Swap { src: R8::new(b2_0) })
+                    }
                     (0b0010_1110, _, _) => Ok(Instruction::SRAIndirectHL),
-                    (_, 0b0010_1, B | C | D | E | H | L | A) => Ok(Instruction::SRA {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0010_1, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::SRA { src: R8::new(b2_0) })
+                    }
                     (0b0010_0110, _, _) => Ok(Instruction::SLAIndirectHL),
-                    (_, 0b0010_0, B | C | D | E | H | L | A) => Ok(Instruction::SLA {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0010_0, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::SLA { src: R8::new(b2_0) })
+                    }
                     (0b0001_1110, _, _) => Ok(Instruction::RRIndirectHL),
-                    (_, 0b0001_1, B | C | D | E | H | L | A) => Ok(Instruction::RR {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0001_1, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::RR { src: R8::new(b2_0) })
+                    }
                     (0b0001_0110, _, _) => Ok(Instruction::RLIndirectHL),
-                    (_, 0b0001_0, B | C | D | E | H | L | A) => Ok(Instruction::RL {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0001_0, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::RL { src: R8::new(b2_0) })
+                    }
                     (0b0000_1110, _, _) => Ok(Instruction::RRCIndirectHL),
-                    (_, 0b0000_1, B | C | D | E | H | L | A) => Ok(Instruction::RRC {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0000_1, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::RRC { src: R8::new(b2_0) })
+                    }
                     (0b0000_0110, _, _) => Ok(Instruction::RLCIndirectHL),
-                    (_, 0b0000_0, B | C | D | E | H | L | A) => Ok(Instruction::RLC {
-                        src: Reg::new(b2_0),
-                    }),
+                    (_, 0b0000_0, B | C | D | E | H | L | A) => {
+                        Ok(Instruction::RLC { src: R8::new(b2_0) })
+                    }
 
                     _ => Err(DecodeError::UnknownOpcode),
                 }
@@ -614,9 +614,7 @@ impl Instruction {
                 Ok(Instruction::XorImm8 { imm: *imm })
             }
             (0b1010_1110, _, _, _) => Ok(Instruction::Xor8IndirectHL),
-            (_, 0b10101, _, _) => Ok(Instruction::Xor8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10101, _, _) => Ok(Instruction::Xor8 { src: R8::new(b2_0) }),
             (0b1111_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -625,9 +623,7 @@ impl Instruction {
                 Ok(Instruction::OrImm8 { imm: *imm })
             }
             (0b1011_0110, _, _, _) => Ok(Instruction::Or8IndirectHL),
-            (_, 0b10110, _, _) => Ok(Instruction::Or8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10110, _, _) => Ok(Instruction::Or8 { src: R8::new(b2_0) }),
             (0b1110_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -636,17 +632,11 @@ impl Instruction {
                 Ok(Instruction::AndImm8 { imm: *imm })
             }
             (0b1010_0110, _, _, _) => Ok(Instruction::And8IndirectHL),
-            (_, 0b10100, _, _) => Ok(Instruction::And8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10100, _, _) => Ok(Instruction::And8 { src: R8::new(b2_0) }),
             (0b0011_0101, _, _, _) => Ok(Instruction::Dec8IndirectHL),
-            (_, _, 0b00, 0b101) => Ok(Instruction::Dec8 {
-                src: Reg::new(b5_3),
-            }),
+            (_, _, 0b00, 0b101) => Ok(Instruction::Dec8 { src: R8::new(b5_3) }),
             (0b0011_0100, _, _, _) => Ok(Instruction::Inc8IndirectHL),
-            (_, _, 0b00, 0b100) => Ok(Instruction::Inc8 {
-                src: Reg::new(b5_3),
-            }),
+            (_, _, 0b00, 0b100) => Ok(Instruction::Inc8 { src: R8::new(b5_3) }),
             (0b1111_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -655,9 +645,7 @@ impl Instruction {
                 Ok(Instruction::CmpImm8 { imm: *imm })
             }
             (0b1011_1110, _, _, _) => Ok(Instruction::Cmp8IndirectHL),
-            (_, 0b10111, _, _) => Ok(Instruction::Cmp8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10111, _, _) => Ok(Instruction::Cmp8 { src: R8::new(b2_0) }),
             (0b1101_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -666,9 +654,7 @@ impl Instruction {
                 Ok(Instruction::SubCImm8 { imm: *imm })
             }
             (0b1001_1110, _, _, _) => Ok(Instruction::SubC8IndirectHL),
-            (_, 0b10011, _, _) => Ok(Instruction::SubC8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10011, _, _) => Ok(Instruction::SubC8 { src: R8::new(b2_0) }),
             (0b1101_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -677,9 +663,7 @@ impl Instruction {
                 Ok(Instruction::SubImm8 { imm: *imm })
             }
             (0b1001_0110, _, _, _) => Ok(Instruction::Sub8IndirectHL),
-            (_, 0b10010, _, _) => Ok(Instruction::Sub8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10010, _, _) => Ok(Instruction::Sub8 { src: R8::new(b2_0) }),
             (0b1100_1110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -688,9 +672,7 @@ impl Instruction {
                 Ok(Instruction::AddCImm8 { imm: *imm })
             }
             (0b1000_1110, _, _, _) => Ok(Instruction::AddC8IndirectHL),
-            (_, 0b10001, _, _) => Ok(Instruction::AddC8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10001, _, _) => Ok(Instruction::AddC8 { src: R8::new(b2_0) }),
             (0b1100_0110, _, _, _) => {
                 let Some(imm) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -699,9 +681,7 @@ impl Instruction {
                 Ok(Instruction::AddImm8 { imm: *imm })
             }
             (0b1000_0110, _, _, _) => Ok(Instruction::Add8IndirectHL),
-            (_, 0b10000, _, _) => Ok(Instruction::Add8 {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b10000, _, _) => Ok(Instruction::Add8 { src: R8::new(b2_0) }),
             (0b1111_1000, _, _, _) => {
                 let Some(offset) = memory.get(1) else {
                     return Err(DecodeError::MemoryOutOfBounds);
@@ -795,15 +775,13 @@ impl Instruction {
 
                 Ok(Instruction::StoreImmIndirectHL { imm: *imm })
             }
-            (_, 0b01110, _, _) => Ok(Instruction::StoreIndirectHL {
-                src: Reg::new(b2_0),
-            }),
+            (_, 0b01110, _, _) => Ok(Instruction::StoreIndirectHL { src: R8::new(b2_0) }),
             (_, _, 0b01, 0b110) => Ok(Instruction::LoadIndirectHL {
-                dest: Reg::new(b5_3),
+                dest: R8::new(b5_3),
             }),
             (_, _, 0b01, _) => Ok(Instruction::LoadReg8 {
-                src: Reg::new(b2_0),
-                dest: Reg::new(b5_3),
+                src: R8::new(b2_0),
+                dest: R8::new(b5_3),
             }),
             (_, _, 0b00, 0b110) => {
                 let Some(imm) = memory.get(1) else {
@@ -811,7 +789,7 @@ impl Instruction {
                 };
 
                 Ok(Instruction::LoadImm8 {
-                    dest: Reg::new(b5_3),
+                    dest: R8::new(b5_3),
                     imm: *imm,
                 })
             }
@@ -827,12 +805,12 @@ mod decode_tests {
 
     #[rstest]
     fn it_decodes_load_reg_opcode(
-        #[values(A, B, C, D, E, H, L)] src: Reg,
-        #[values(A, B, C, D, E, H, L)] dest: Reg,
+        #[values(A, B, C, D, E, H, L)] src: R8,
+        #[values(A, B, C, D, E, H, L)] dest: R8,
     ) {
         // 0b01_xxx_yyy
         let opcode: u8 =
-            0b01_000_000 | (<Reg as Into<u8>>::into(dest) << 3) | <Reg as Into<u8>>::into(src);
+            0b01_000_000 | (<R8 as Into<u8>>::into(dest) << 3) | <R8 as Into<u8>>::into(src);
 
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("LoadReg should decode");
@@ -841,9 +819,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_load_imm_opcode(#[values(B, C, D, E, H, L, A)] dest: Reg) {
+    fn it_decodes_load_imm_opcode(#[values(B, C, D, E, H, L, A)] dest: R8) {
         // 0b00_xxx_110, <1-byte imm>
-        let opcode: u8 = 0b00_000_110 | (<Reg as Into<u8>>::into(dest) << 3);
+        let opcode: u8 = 0b00_000_110 | (<R8 as Into<u8>>::into(dest) << 3);
         let memory = [opcode, 0b0000_0001];
         let decoded = Instruction::decode(&memory).expect("LoadImm should decode");
 
@@ -851,9 +829,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_load_indirect_hl_opcode(#[values(B, C, D, E, H, L, A)] dest: Reg) {
+    fn it_decodes_load_indirect_hl_opcode(#[values(B, C, D, E, H, L, A)] dest: R8) {
         // 0b01_xxx_110
-        let opcode: u8 = 0b01_000_110 | (<Reg as Into<u8>>::into(dest) << 3);
+        let opcode: u8 = 0b01_000_110 | (<R8 as Into<u8>>::into(dest) << 3);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("LoadIndirectHL should decode");
 
@@ -861,9 +839,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_store_indirect_hl_opcode(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_store_indirect_hl_opcode(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b01110_xxx
-        let opcode: u8 = 0b01110_000 | <Reg as Into<u8>>::into(src);
+        let opcode: u8 = 0b01110_000 | <R8 as Into<u8>>::into(src);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("StoreIndirectHL should decode");
 
@@ -1063,9 +1041,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_add_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_add_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b10000_xxx
-        let opcode = 0b10000_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10000_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Add8");
 
@@ -1090,9 +1068,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_addc_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_addc_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b10001_xxx
-        let opcode = 0b10001_000 + <Reg as Into<u8>>::into(src);
+        let opcode = 0b10001_000 + <R8 as Into<u8>>::into(src);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("AddC8");
         assert_eq!(decoded, Instruction::AddC8 { src });
@@ -1116,9 +1094,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_sub_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_sub_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b10010_xxx
-        let opcode = 0b10010_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10010_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Sub8");
 
@@ -1143,9 +1121,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_subc_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_subc_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b10011_xxx
-        let opcode = 0b10011_000 + <Reg as Into<u8>>::into(src);
+        let opcode = 0b10011_000 + <R8 as Into<u8>>::into(src);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("SubC8");
         assert_eq!(decoded, Instruction::SubC8 { src });
@@ -1169,9 +1147,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_cmp_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_cmp_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b10111_xxx
-        let opcode = 0b10111_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10111_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Cmp8");
 
@@ -1196,9 +1174,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_inc8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_inc8(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b00_xxx_100
-        let opcode = 0b00_000_100 + (<Reg as Into<u8>>::into(src) << 3);
+        let opcode = 0b00_000_100 + (<R8 as Into<u8>>::into(src) << 3);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Inc8");
         assert_eq!(decoded, Instruction::Inc8 { src });
@@ -1214,9 +1192,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_dec8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_dec8(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b00_xxx_101
-        let opcode = 0b00_000_101 + (<Reg as Into<u8>>::into(src) << 3);
+        let opcode = 0b00_000_101 + (<R8 as Into<u8>>::into(src) << 3);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Dec8");
         assert_eq!(decoded, Instruction::Dec8 { src });
@@ -1232,9 +1210,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_and_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_and_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b10100_xxx
-        let opcode = 0b10100_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10100_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("And8");
 
@@ -1259,9 +1237,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_or_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_or_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b10110_xxx
-        let opcode = 0b10110_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10110_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Or8");
 
@@ -1286,9 +1264,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_xor_8(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_xor_8(#[values(B, C, D, E, H, L, A)] src: R8) {
         // 0b10101_xxx
-        let opcode = 0b10101_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10101_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Xor8");
 
@@ -1412,9 +1390,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_rlc(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_rlc(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0000_0xxx
-        let opcode = 0b0000_0_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0000_0_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("RLC");
         assert_eq!(decoded, Instruction::RLC { src });
@@ -1429,9 +1407,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_rrc(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_rrc(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0000_1xxx
-        let opcode = 0b0000_1_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0000_1_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("RRC");
         assert_eq!(decoded, Instruction::RRC { src });
@@ -1446,9 +1424,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_rl(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_rl(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0001_0xxx
-        let opcode = 0b0001_0_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0001_0_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("RL");
         assert_eq!(decoded, Instruction::RL { src });
@@ -1463,9 +1441,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_rr(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_rr(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0001_1xxx
-        let opcode = 0b0001_1_000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0001_1_000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("RR");
         assert_eq!(decoded, Instruction::RR { src });
@@ -1480,9 +1458,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_sla(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_sla(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0010_0xxx
-        let opcode = 0b0010_0000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0010_0000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("SLA");
         assert_eq!(decoded, Instruction::SLA { src });
@@ -1497,9 +1475,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_sra(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_sra(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0010_1xxx
-        let opcode = 0b0010_1000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0010_1000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("SRA");
         assert_eq!(decoded, Instruction::SRA { src });
@@ -1514,9 +1492,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_swap(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_swap(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0011_0xxx
-        let opcode = 0b0011_0000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0011_0000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("SRA");
         assert_eq!(decoded, Instruction::Swap { src });
@@ -1531,9 +1509,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_srl(#[values(B, C, D, E, H, L, A)] src: Reg) {
+    fn it_decodes_srl(#[values(B, C, D, E, H, L, A)] src: R8) {
         //0b0011_1xxx
-        let opcode = 0b0011_1000 + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b0011_1000 + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("SRL");
         assert_eq!(decoded, Instruction::SRL { src });
@@ -1549,11 +1527,11 @@ mod decode_tests {
 
     #[rstest]
     fn it_decodes_bit(
-        #[values(B, C, D, E, H, L, A)] src: Reg,
+        #[values(B, C, D, E, H, L, A)] src: R8,
         #[values(0, 1, 2, 3, 4, 5, 6, 7)] bit: u8,
     ) {
         //0b01xxxyyy
-        let opcode = 0b01_000_000 + (bit << 3) + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b01_000_000 + (bit << 3) + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("BIT");
         assert_eq!(decoded, Instruction::BIT { src, bit });
@@ -1570,11 +1548,11 @@ mod decode_tests {
 
     #[rstest]
     fn it_decodes_res(
-        #[values(B, C, D, E, H, L, A)] src: Reg,
+        #[values(B, C, D, E, H, L, A)] src: R8,
         #[values(0, 1, 2, 3, 4, 5, 6, 7)] bit: u8,
     ) {
         //0b10xxxyyy
-        let opcode = 0b10_000_000 + (bit << 3) + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b10_000_000 + (bit << 3) + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("RES");
         assert_eq!(decoded, Instruction::RES { src, bit });
@@ -1591,11 +1569,11 @@ mod decode_tests {
 
     #[rstest]
     fn it_decodes_set(
-        #[values(B, C, D, E, H, L, A)] src: Reg,
+        #[values(B, C, D, E, H, L, A)] src: R8,
         #[values(0, 1, 2, 3, 4, 5, 6, 7)] bit: u8,
     ) {
         //0b11xxxyyy
-        let opcode = 0b11_000_000 + (bit << 3) + (<Reg as Into<u8>>::into(src) << 0);
+        let opcode = 0b11_000_000 + (bit << 3) + (<R8 as Into<u8>>::into(src) << 0);
         let memory = [0xCB, opcode];
         let decoded = Instruction::decode(&memory).expect("SET");
         assert_eq!(decoded, Instruction::SET { src, bit });
@@ -1826,7 +1804,7 @@ mod machine_tests {
     #[case(R16::DE, D, E)]
     #[case(R16::HL, H, L)]
     #[case(R16::AF, A, F)]
-    fn it_sets_reg_pairs(#[case] pair: R16, #[case] h_reg: Reg, #[case] l_reg: Reg) {
+    fn it_sets_reg_pairs(#[case] pair: R16, #[case] h_reg: R8, #[case] l_reg: R8) {
         let mut machine = Machine::new();
 
         machine.set_r16(pair, 0xABCD);
@@ -1840,7 +1818,7 @@ mod machine_tests {
     #[case(R16::DE, D, E)]
     #[case(R16::HL, H, L)]
     #[case(R16::AF, A, F)]
-    fn it_gets_reg_pairs(#[case] pair: R16, #[case] h_reg: Reg, #[case] l_reg: Reg) {
+    fn it_gets_reg_pairs(#[case] pair: R16, #[case] h_reg: R8, #[case] l_reg: R8) {
         let mut machine = Machine::new();
         machine.set_r8(h_reg, 0xAB);
         machine.set_r8(l_reg, 0xCD);
@@ -1856,8 +1834,8 @@ mod exec_tests {
 
     #[rstest]
     fn it_execs_load_reg(
-        #[values(B, C, D, E, H, L, A)] src: Reg,
-        #[values(B, C, D, E, H, L, A)] dest: Reg,
+        #[values(B, C, D, E, H, L, A)] src: R8,
+        #[values(B, C, D, E, H, L, A)] dest: R8,
     ) {
         let mut machine = Machine::new();
 
@@ -1876,7 +1854,7 @@ mod exec_tests {
 
     #[rstest]
     fn it_execs_load_imm8(
-        #[values(B, C, D, E, H, L, A)] dest: Reg,
+        #[values(B, C, D, E, H, L, A)] dest: R8,
         #[values(0x00, 0x01, 0xFE, 0xFF)] imm: u8,
     ) {
         let mut machine = Machine::new();
@@ -1892,7 +1870,7 @@ mod exec_tests {
     }
 
     #[rstest]
-    fn it_execs_load_indirect_hl_8(#[values(B, C, D, E, H, L, A)] dest: Reg) {
+    fn it_execs_load_indirect_hl_8(#[values(B, C, D, E, H, L, A)] dest: R8) {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
