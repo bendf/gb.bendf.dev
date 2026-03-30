@@ -1,3 +1,4 @@
+use R16::{AF, BC, DE, HL, SP};
 use arbitrary_int::{u2, u3, u5};
 use wasm_bindgen::prelude::*;
 use web_sys;
@@ -14,19 +15,19 @@ pub enum R16 {
 impl R16 {
     pub fn new(id: u2) -> Self {
         match id.value() {
-            0b00 => R16::BC,
-            0b01 => R16::DE,
-            0b10 => R16::HL,
-            0b11 => R16::SP,
+            0b00 => BC,
+            0b01 => DE,
+            0b10 => HL,
+            0b11 => SP,
             x => panic!("Unknown R16 id {:#b}", x),
         }
     }
     pub fn stk(id: u2) -> Self {
         match id.value() {
-            0b00 => R16::BC,
-            0b01 => R16::DE,
-            0b10 => R16::HL,
-            0b11 => R16::AF,
+            0b00 => BC,
+            0b01 => DE,
+            0b10 => HL,
+            0b11 => AF,
             x => panic!("Unknown R16 id {:#b}", x),
         }
     }
@@ -35,11 +36,11 @@ impl R16 {
 impl Into<u8> for R16 {
     fn into(self) -> u8 {
         match self {
-            R16::BC => 0b00,
-            R16::DE => 0b01,
-            R16::HL => 0b10,
-            R16::AF => 0b11,
-            R16::SP => 0b11,
+            BC => 0b00,
+            DE => 0b01,
+            HL => 0b10,
+            AF => 0b11,
+            SP => 0b11,
         }
     }
 }
@@ -183,17 +184,17 @@ impl Machine {
 
     pub fn get_r16(&self, reg_pair: R16) -> u16 {
         match reg_pair {
-            R16::BC => {
+            BC => {
                 u16::from_be_bytes([self.gp_registers[B as usize], self.gp_registers[C as usize]])
             }
-            R16::DE => {
+            DE => {
                 u16::from_be_bytes([self.gp_registers[D as usize], self.gp_registers[E as usize]])
             }
-            R16::HL => {
+            HL => {
                 u16::from_be_bytes([self.gp_registers[H as usize], self.gp_registers[L as usize]])
             }
-            R16::SP => self.sp,
-            R16::AF => {
+            SP => self.sp,
+            AF => {
                 u16::from_be_bytes([self.gp_registers[A as usize], self.gp_registers[F as usize]])
             }
         }
@@ -218,23 +219,23 @@ impl Machine {
     pub fn set_r16(&mut self, reg_pair: R16, value: u16) {
         let [low, high] = value.to_le_bytes();
         match reg_pair {
-            R16::BC => {
+            BC => {
                 self.set_r8(B, high);
                 self.set_r8(C, low);
             }
-            R16::DE => {
+            DE => {
                 self.set_r8(D, high);
                 self.set_r8(E, low);
             }
-            R16::HL => {
+            HL => {
                 self.set_r8(H, high);
                 self.set_r8(L, low);
             }
-            R16::AF => {
+            AF => {
                 self.set_r8(A, high);
                 self.set_r8(F, low);
             }
-            R16::SP => self.set_sp(value),
+            SP => self.set_sp(value),
         }
     }
 
@@ -263,26 +264,26 @@ impl Machine {
                 self.inc_pc();
             }
             LoadIndirectHL { dest } => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
                 let value = self.get_mem8(addr);
                 self.set_r8(dest, value);
                 self.inc_pc();
             }
             StoreIndirectHL { src } => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
                 let value = self.get_r8(src);
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
             }
             StoreImmIndirectHL { imm } => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
 
                 self.set_mem8(addr, imm);
                 self.adv_pc(2)
             }
             LoadAccIndirectBC => {
-                let addr = self.get_r16(R16::BC);
+                let addr = self.get_r16(BC);
 
                 let value = self.get_mem8(addr);
 
@@ -290,7 +291,7 @@ impl Machine {
                 self.inc_pc();
             }
             LoadAccIndirectDE => {
-                let addr = self.get_r16(R16::DE);
+                let addr = self.get_r16(DE);
 
                 let value = self.get_mem8(addr);
 
@@ -298,14 +299,14 @@ impl Machine {
                 self.inc_pc();
             }
             StoreAccIndirectBC => {
-                let addr = self.get_r16(R16::BC);
+                let addr = self.get_r16(BC);
                 let value = self.get_r8(A);
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
             }
             StoreAccIndirectDE => {
-                let addr = self.get_r16(R16::DE);
+                let addr = self.get_r16(DE);
                 let value = self.get_r8(A);
 
                 self.set_mem8(addr, value);
@@ -354,38 +355,38 @@ impl Machine {
                 self.inc_pc();
             }
             LoadAccIndirectHLDec => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
 
                 let value = self.get_mem8(addr);
 
                 self.set_r8(A, value);
                 self.inc_pc();
-                self.set_r16(R16::HL, addr - 1);
+                self.set_r16(HL, addr - 1);
             }
             StoreAccIndirectHLDec => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
                 let value = self.get_r8(A);
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
-                self.set_r16(R16::HL, addr - 1);
+                self.set_r16(HL, addr - 1);
             }
             LoadAccIndirectHLInc => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
 
                 let value = self.get_mem8(addr);
 
                 self.set_r8(A, value);
                 self.inc_pc();
-                self.set_r16(R16::HL, addr + 1);
+                self.set_r16(HL, addr + 1);
             }
             StoreAccIndirectHLInc => {
-                let addr = self.get_r16(R16::HL);
+                let addr = self.get_r16(HL);
                 let value = self.get_r8(A);
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
-                self.set_r16(R16::HL, addr + 1);
+                self.set_r16(HL, addr + 1);
             }
             _ => todo!("Missing instruction exec"),
         }
@@ -1111,7 +1112,7 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_load_imm_16(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] dest: R16) {
+    fn it_decodes_load_imm_16(#[values(BC, DE, HL, SP)] dest: R16) {
         // 0b00_xx_0001
         let opcode = 0b00_00_0001 + (<R16 as Into<u8>>::into(dest) << 4);
         let memory = [opcode, 0b1111_0000, 0b0000_1111];
@@ -1139,7 +1140,7 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_push(#[values(R16::BC, R16::DE, R16::HL, R16::AF)] src: R16) {
+    fn it_decodes_push(#[values(BC, DE, HL, AF)] src: R16) {
         // 0b11_xx_0101
         let opcode = 0b11_00_0101 + (<R16 as Into<u8>>::into(src) << 4);
         let memory = [opcode];
@@ -1149,7 +1150,7 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_pop(#[values(R16::BC, R16::DE, R16::HL, R16::AF)] dest: R16) {
+    fn it_decodes_pop(#[values(BC, DE, HL, AF)] dest: R16) {
         // 0b11_xx_0001
         let opcode = 0b11_00_0001 + (<R16 as Into<u8>>::into(dest) << 4);
         let memory = [opcode];
@@ -1450,7 +1451,7 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_inc16(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] reg_pair: R16) {
+    fn it_decodes_inc16(#[values(BC, DE, HL, SP)] reg_pair: R16) {
         //0b00_xx_0011
         let opcode = 0b00_00_0011 + (<R16 as Into<u8>>::into(reg_pair) << 4);
         let memory = [opcode];
@@ -1459,7 +1460,7 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_dec16(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] reg_pair: R16) {
+    fn it_decodes_dec16(#[values(BC, DE, HL, SP)] reg_pair: R16) {
         //0b00_xx_1011
         let opcode = 0b00_00_1011 + (<R16 as Into<u8>>::into(reg_pair) << 4);
         let memory = [opcode];
@@ -1468,7 +1469,7 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_add16_hl(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] reg_pair: R16) {
+    fn it_decodes_add16_hl(#[values(BC, DE, HL, SP)] reg_pair: R16) {
         //0b00_xx_1001
         let opcode: u8 = 0b00_00_1001 + (<R16 as Into<u8>>::into(reg_pair) << 4);
         let memory = [opcode];
@@ -1927,10 +1928,10 @@ mod machine_tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case(R16::BC, B, C)]
-    #[case(R16::DE, D, E)]
-    #[case(R16::HL, H, L)]
-    #[case(R16::AF, A, F)]
+    #[case(BC, B, C)]
+    #[case(DE, D, E)]
+    #[case(HL, H, L)]
+    #[case(AF, A, F)]
     fn it_sets_reg_pairs(#[case] pair: R16, #[case] h_reg: R8, #[case] l_reg: R8) {
         let mut machine = Machine::new();
 
@@ -1941,10 +1942,10 @@ mod machine_tests {
     }
 
     #[rstest]
-    #[case(R16::BC, B, C)]
-    #[case(R16::DE, D, E)]
-    #[case(R16::HL, H, L)]
-    #[case(R16::AF, A, F)]
+    #[case(BC, B, C)]
+    #[case(DE, D, E)]
+    #[case(HL, H, L)]
+    #[case(AF, A, F)]
     fn it_gets_reg_pairs(#[case] pair: R16, #[case] h_reg: R8, #[case] l_reg: R8) {
         let mut machine = Machine::new();
         machine.set_r8(h_reg, 0xAB);
@@ -2002,7 +2003,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(dest, 0x00);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
 
         machine.set_memory(1, &[0xFE]);
 
@@ -2019,7 +2020,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, 0xFE);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
 
         machine.set_memory(1, &[0x00]);
 
@@ -2035,7 +2036,7 @@ mod exec_tests {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
 
         machine.set_memory(1, &[0x00]);
 
@@ -2053,7 +2054,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
-        machine.set_r16(R16::BC, 0x0001);
+        machine.set_r16(BC, 0x0001);
 
         machine.set_memory(1, &[value]);
 
@@ -2072,7 +2073,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
-        machine.set_r16(R16::DE, 0x0001);
+        machine.set_r16(DE, 0x0001);
 
         machine.set_memory(1, &[value]);
 
@@ -2091,7 +2092,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, value);
-        machine.set_r16(R16::BC, 0x0001);
+        machine.set_r16(BC, 0x0001);
         machine.set_memory(1, &[0x00]);
 
         let ins = Instruction::StoreAccIndirectBC;
@@ -2109,7 +2110,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, value);
-        machine.set_r16(R16::DE, 0x0001);
+        machine.set_r16(DE, 0x0001);
         machine.set_memory(1, &[0x00]);
 
         let ins = Instruction::StoreAccIndirectDE;
@@ -2240,7 +2241,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
 
         machine.set_memory(1, &[value]);
 
@@ -2249,7 +2250,7 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
-        assert_eq!(0x00, machine.get_r16(R16::HL));
+        assert_eq!(0x00, machine.get_r16(HL));
     }
 
     #[test]
@@ -2260,7 +2261,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, value);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
         machine.set_memory(1, &[0x00]);
 
         let ins = Instruction::StoreAccIndirectHLDec;
@@ -2268,7 +2269,7 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
-        assert_eq!(0x00, machine.get_r16(R16::HL));
+        assert_eq!(0x00, machine.get_r16(HL));
     }
     #[test]
     fn it_execs_load_acc_indirect_hl_inc() {
@@ -2278,7 +2279,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
 
         machine.set_memory(1, &[value]);
 
@@ -2287,7 +2288,7 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
-        assert_eq!(0x02, machine.get_r16(R16::HL));
+        assert_eq!(0x02, machine.get_r16(HL));
     }
 
     #[test]
@@ -2298,7 +2299,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, value);
-        machine.set_r16(R16::HL, 0x0001);
+        machine.set_r16(HL, 0x0001);
         machine.set_memory(1, &[0x00]);
 
         let ins = Instruction::StoreAccIndirectHLInc;
@@ -2306,6 +2307,6 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
-        assert_eq!(0x02, machine.get_r16(R16::HL));
+        assert_eq!(0x02, machine.get_r16(HL));
     }
 }
