@@ -2,15 +2,47 @@ use arbitrary_int::{u2, u3, u5};
 use wasm_bindgen::prelude::*;
 use web_sys;
 
-type RegPair = u8;
-const BC: RegPair = 0b00;
-const DE: RegPair = 0b01;
-const HL: RegPair = 0b10;
-// Not stricty a Register pair.
-// TODO: Rename Regpair
-const AF: RegPair = 0b11;
-// Sometimes SP is used like this.
-const SP: RegPair = 0b11;
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum R16 {
+    BC,
+    DE,
+    HL,
+    AF,
+    SP,
+}
+
+impl R16 {
+    pub fn new(id: u2) -> Self {
+        match id.value() {
+            0b00 => R16::BC,
+            0b01 => R16::DE,
+            0b10 => R16::HL,
+            0b11 => R16::SP,
+            x => panic!("Unknown R16 id {:#b}", x),
+        }
+    }
+    pub fn stk(id: u2) -> Self {
+        match id.value() {
+            0b00 => R16::BC,
+            0b01 => R16::DE,
+            0b10 => R16::HL,
+            0b11 => R16::AF,
+            x => panic!("Unknown R16 id {:#b}", x),
+        }
+    }
+}
+
+impl Into<u8> for R16 {
+    fn into(self) -> u8 {
+        match self {
+            R16::BC => 0b00,
+            R16::DE => 0b01,
+            R16::HL => 0b10,
+            R16::AF => 0b11,
+            R16::SP => 0b11,
+        }
+    }
+}
 
 type Reg = u8;
 pub const A: Reg = 0b111;
@@ -51,6 +83,7 @@ pub fn say_hello() -> String {
 pub struct Machine {
     pc: u16,
     gp_registers: [u8; 8],
+    sp: u16,
     memory: [u8; 65536],
 }
 
@@ -59,6 +92,7 @@ impl Machine {
         Machine {
             pc: 0,
             gp_registers: [0; 8],
+            sp: 0,
             memory: [0; 65536],
         }
     }
@@ -74,28 +108,28 @@ impl Machine {
     pub fn eval(&self, _steps: usize) {}
 
     pub fn get_r8(&self, reg: u8) -> u8 {
-        if (reg > 8) {
+        if reg > 8 {
             panic!("Invalid Register");
         } else {
             self.gp_registers[reg as usize]
         }
     }
 
-    pub fn get_r16(&self, reg_pair: RegPair) -> u16 {
+    pub fn get_r16(&self, reg_pair: R16) -> u16 {
         match reg_pair {
-            BC => {
+            R16::BC => {
                 u16::from_be_bytes([self.gp_registers[B as usize], self.gp_registers[C as usize]])
             }
-            DE => {
+            R16::DE => {
                 u16::from_be_bytes([self.gp_registers[D as usize], self.gp_registers[E as usize]])
             }
-            HL => {
+            R16::HL => {
                 u16::from_be_bytes([self.gp_registers[H as usize], self.gp_registers[L as usize]])
             }
-            AF => {
+            R16::SP => self.sp,
+            R16::AF => {
                 u16::from_be_bytes([self.gp_registers[A as usize], self.gp_registers[F as usize]])
             }
-            _ => panic!("Unknown register pair"),
         }
     }
 
@@ -104,33 +138,37 @@ impl Machine {
     }
 
     pub fn set_r8(&mut self, reg: u8, value: u8) {
-        if (reg > 8) {
+        if reg > 8 {
             panic!("Invalid Register");
         } else {
             self.gp_registers[reg as usize] = value;
         }
     }
 
-    pub fn set_r16(&mut self, reg_pair: RegPair, value: u16) {
+    pub fn set_sp(&mut self, value: u16) {
+        self.sp = value
+    }
+
+    pub fn set_r16(&mut self, reg_pair: R16, value: u16) {
         let [low, high] = value.to_le_bytes();
         match reg_pair {
-            0b00 => {
+            R16::BC => {
                 self.set_r8(B, high);
                 self.set_r8(C, low);
             }
-            0b01 => {
+            R16::DE => {
                 self.set_r8(D, high);
                 self.set_r8(E, low);
             }
-            0b10 => {
+            R16::HL => {
                 self.set_r8(H, high);
                 self.set_r8(L, low);
             }
-            0b11 => {
+            R16::AF => {
                 self.set_r8(A, high);
                 self.set_r8(F, low);
             }
-            _ => panic!("Invalid RegPair"),
+            R16::SP => self.set_sp(value),
         }
     }
 
@@ -155,7 +193,7 @@ impl Machine {
                 self.inc_pc();
             }
             LoadIndirectHL { dest } => {
-                let addr = self.get_r16(HL);
+                let addr = self.get_r16(R16::HL);
                 let value = self.get_mem8(addr);
                 self.set_r8(dest, value);
                 self.inc_pc();
@@ -186,11 +224,11 @@ pub enum Instruction {
     StoreAccIndirectHLDec,
     LoadAccIndirectHLInc,
     StoreAccIndirectHLInc,
-    LoadImm16 { dest: RegPair, imm: u16 },
+    LoadImm16 { dest: R16, imm: u16 },
     StoreSP16 { addr: u16 },
     LoadSPHL,
-    Push { src: RegPair },
-    Pop { dest: RegPair },
+    Push { src: R16 },
+    Pop { dest: R16 },
     LoadHLSPOffset { offset: i8 },
     Add8 { src: Reg },
     Add8IndirectHL,
@@ -224,9 +262,9 @@ pub enum Instruction {
     SetCarryFlag,
     DecAdjAcc,
     CmplAcc,
-    Inc16 { src: RegPair },
-    Dec16 { src: RegPair },
-    Add16HL { src: RegPair },
+    Inc16 { src: R16 },
+    Dec16 { src: R16 },
+    Add16HL { src: R16 },
     AddSPImm8 { imm: i8 },
     RLCA,
     RRCA,
@@ -462,13 +500,19 @@ impl Instruction {
                 })
             }
             (0b00_00_1001 | 0b00_01_1001 | 0b00_10_1001 | 0b00_11_1001, _, _, _) => {
-                Ok(Instruction::Add16HL { src: b5_4 })
+                Ok(Instruction::Add16HL {
+                    src: R16::new(u2::new(b5_4)),
+                })
             }
             (0b00_00_1011 | 0b00_01_1011 | 0b00_10_1011 | 0b00_11_1011, _, _, _) => {
-                Ok(Instruction::Dec16 { src: b5_4 })
+                Ok(Instruction::Dec16 {
+                    src: R16::new(u2::new(b5_4)),
+                })
             }
             (0b00_00_0011 | 0b00_01_0011 | 0b00_10_0011 | 0b00_11_0011, _, _, _) => {
-                Ok(Instruction::Inc16 { src: b5_4 })
+                Ok(Instruction::Inc16 {
+                    src: R16::new(u2::new(b5_4)),
+                })
             }
             (0b0010_1111, _, _, _) => Ok(Instruction::CmplAcc),
             (0b0010_0111, _, _, _) => Ok(Instruction::DecAdjAcc),
@@ -560,10 +604,14 @@ impl Instruction {
                 })
             }
             (0b11_00_0001 | 0b11_01_0001 | 0b11_10_0001 | 0b11_11_0001, _, _, _) => {
-                Ok(Instruction::Pop { dest: b5_4 })
+                Ok(Instruction::Pop {
+                    dest: R16::stk(u2::new(b5_4)),
+                })
             }
             (0b11_00_0101 | 0b11_01_0101 | 0b11_10_0101 | 0b11_11_0101, _, _, _) => {
-                Ok(Instruction::Push { src: b5_4 })
+                Ok(Instruction::Push {
+                    src: R16::stk(u2::new(b5_4)),
+                })
             }
             (0b1111_1001, _, _, _) => Ok(Instruction::LoadSPHL),
             (0b0000_1000, _, _, _) => {
@@ -583,7 +631,10 @@ impl Instruction {
                 // Unwrap safe here as we've guaranteed the range above.
                 let imm: u16 = u16::from_le_bytes(imm.try_into().unwrap());
 
-                Ok(Instruction::LoadImm16 { dest: b5_4, imm })
+                Ok(Instruction::LoadImm16 {
+                    dest: R16::new(u2::new(b5_4)),
+                    imm,
+                })
             }
             (0b0010_1010, _, _, _) => Ok(Instruction::LoadAccIndirectHLInc),
             (0b0010_0010, _, _, _) => Ok(Instruction::StoreAccIndirectHLInc),
@@ -842,9 +893,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_load_imm_16(#[values(BC, DE, HL, SP)] dest: u8) {
+    fn it_decodes_load_imm_16(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] dest: R16) {
         // 0b00_xx_0001
-        let opcode = 0b00_00_0001 + (dest << 4);
+        let opcode = 0b00_00_0001 + (<R16 as Into<u8>>::into(dest) << 4);
         let memory = [opcode, 0b1111_0000, 0b0000_1111];
         let decoded = Instruction::decode(&memory).expect("LoadImm16 should decode");
 
@@ -870,9 +921,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_push(#[values(BC, DE, HL, AF)] src: u8) {
+    fn it_decodes_push(#[values(R16::BC, R16::DE, R16::HL, R16::AF)] src: R16) {
         // 0b11_xx_0101
-        let opcode = 0b11_00_0101 + (src << 4);
+        let opcode = 0b11_00_0101 + (<R16 as Into<u8>>::into(src) << 4);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Push");
 
@@ -880,9 +931,9 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_pop(#[values(BC, DE, HL, AF)] dest: u8) {
+    fn it_decodes_pop(#[values(R16::BC, R16::DE, R16::HL, R16::AF)] dest: R16) {
         // 0b11_xx_0001
-        let opcode = 0b11_00_0001 + (dest << 4);
+        let opcode = 0b11_00_0001 + (<R16 as Into<u8>>::into(dest) << 4);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Pop");
 
@@ -1181,27 +1232,27 @@ mod decode_tests {
     }
 
     #[rstest]
-    fn it_decodes_inc16(#[values(BC, DE, HL, SP)] reg_pair: u8) {
+    fn it_decodes_inc16(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] reg_pair: R16) {
         //0b00_xx_0011
-        let opcode = 0b00_00_0011 + (reg_pair << 4);
+        let opcode = 0b00_00_0011 + (<R16 as Into<u8>>::into(reg_pair) << 4);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Inc16");
         assert_eq!(decoded, Instruction::Inc16 { src: reg_pair });
     }
 
     #[rstest]
-    fn it_decodes_dec16(#[values(BC, DE, HL, SP)] reg_pair: u8) {
+    fn it_decodes_dec16(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] reg_pair: R16) {
         //0b00_xx_1011
-        let opcode = 0b00_00_1011 + (reg_pair << 4);
+        let opcode = 0b00_00_1011 + (<R16 as Into<u8>>::into(reg_pair) << 4);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Dec16");
         assert_eq!(decoded, Instruction::Dec16 { src: reg_pair });
     }
 
     #[rstest]
-    fn it_decodes_add16_hl(#[values(BC, DE, HL, SP)] reg_pair: u8) {
+    fn it_decodes_add16_hl(#[values(R16::BC, R16::DE, R16::HL, R16::SP)] reg_pair: R16) {
         //0b00_xx_1001
-        let opcode = 0b00_00_1001 + (reg_pair << 4);
+        let opcode: u8 = 0b00_00_1001 + (<R16 as Into<u8>>::into(reg_pair) << 4);
         let memory = [opcode];
         let decoded = Instruction::decode(&memory).expect("Add16HL");
         assert_eq!(decoded, Instruction::Add16HL { src: reg_pair });
@@ -1658,11 +1709,11 @@ mod machine_tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case(BC, B, C)]
-    #[case(DE, D, E)]
-    #[case(HL, H, L)]
-    #[case(AF, A, F)]
-    fn it_sets_reg_pairs(#[case] pair: RegPair, #[case] h_reg: Reg, #[case] l_reg: Reg) {
+    #[case(R16::BC, B, C)]
+    #[case(R16::DE, D, E)]
+    #[case(R16::HL, H, L)]
+    #[case(R16::AF, A, F)]
+    fn it_sets_reg_pairs(#[case] pair: R16, #[case] h_reg: Reg, #[case] l_reg: Reg) {
         let mut machine = Machine::new();
 
         machine.set_r16(pair, 0xABCD);
@@ -1671,10 +1722,18 @@ mod machine_tests {
         assert_eq!(machine.get_r8(l_reg), 0xCD);
     }
 
-    fn it_gets_reg_pairs() {}
-
     #[rstest]
-    fn it_panics_on_invalid_reg_pair() {}
+    #[case(R16::BC, B, C)]
+    #[case(R16::DE, D, E)]
+    #[case(R16::HL, H, L)]
+    #[case(R16::AF, A, F)]
+    fn it_gets_reg_pairs(#[case] pair: R16, #[case] h_reg: Reg, #[case] l_reg: Reg) {
+        let mut machine = Machine::new();
+        machine.set_r8(h_reg, 0xAB);
+        machine.set_r8(l_reg, 0xCD);
+
+        assert_eq!(machine.get_r16(pair), 0xABCD);
+    }
 }
 
 #[cfg(test)]
@@ -1725,7 +1784,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(dest, 0x00);
-        machine.set_r16(HL, 0x0001);
+        machine.set_r16(R16::HL, 0x0001);
 
         machine.set_memory(1, &[0xFE]);
 
