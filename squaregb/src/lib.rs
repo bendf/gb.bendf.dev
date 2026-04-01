@@ -1,7 +1,23 @@
+use Flag::{Carry, HalfCarryBCD, SubBCD, Zero};
 use R16::{AF, BC, DE, HL, SP};
-use arbitrary_int::{u2, u3, u5};
+use arbitrary_int::{u1, u2, u3, u4, u5};
 use wasm_bindgen::prelude::*;
 use web_sys;
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+#[repr(u8)]
+pub enum Flag {
+    Zero = 7,
+    SubBCD = 6,
+    HalfCarryBCD = 5,
+    Carry = 4,
+}
+
+impl Into<u8> for Flag {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum R16 {
@@ -204,6 +220,20 @@ impl Machine {
         self.memory[addr as usize]
     }
 
+    pub fn get_mem16(&self, addr: u16) -> u16 {
+        let addr = addr as usize;
+        u16::from_le_bytes([self.memory[addr], self.memory[addr + 1]])
+    }
+
+    pub fn set_mem16(&mut self, addr: u16, value: u16) {
+        let addr = addr as usize;
+
+        let [low, high] = value.to_le_bytes();
+
+        self.memory[addr] = low;
+        self.memory[addr + 1] = high;
+    }
+
     pub fn set_mem8(&mut self, addr: u16, value: u8) {
         self.memory[addr as usize] = value;
     }
@@ -241,6 +271,41 @@ impl Machine {
 
     pub fn get_pc(&self) -> u16 {
         return self.pc;
+    }
+
+    // Return value of corresponding flag
+    pub fn get_flag(&self, flag: Flag) -> bool {
+        let bit: u8 = flag.into();
+
+        let f_reg = self.get_r8(F);
+
+        let value = u1::extract_u8(f_reg, bit as usize);
+        value.into()
+    }
+
+    pub fn set_flag(&mut self, flag: Flag) {
+        let f_reg = self.get_r8(F);
+        let bit: u8 = flag.into();
+
+        let reg = f_reg | (1 << bit);
+        self.set_r8(F, reg);
+    }
+
+    pub fn clear_flag(&mut self, flag: Flag) {
+        let f_reg = self.get_r8(F);
+        let bit: u8 = flag.into();
+
+        let mask = !(1 << bit);
+        let reg = f_reg & mask;
+        self.set_r8(F, reg);
+    }
+
+    pub fn assign_flag(&mut self, flag: Flag, value: bool) {
+        if value {
+            self.set_flag(flag);
+        } else {
+            self.clear_flag(flag);
+        }
     }
 
     pub fn inc_pc(&mut self) {
@@ -387,6 +452,62 @@ impl Machine {
                 self.set_mem8(addr, value);
                 self.inc_pc();
                 self.set_r16(HL, addr + 1);
+            }
+            LoadImm16 { dest, imm } => {
+                self.set_r16(dest, imm);
+                self.adv_pc(3);
+            }
+
+            StoreSP16 { addr } => {
+                let value = self.get_r16(SP);
+                self.set_mem16(addr, value);
+                self.adv_pc(3);
+            }
+
+            LoadSPHL => {
+                let value = self.get_r16(HL);
+                self.set_r16(SP, value);
+                self.inc_pc();
+            }
+
+            Push { src } => {
+                let value = self.get_r16(src);
+                let sp = self.get_r16(SP);
+                self.set_mem16(sp - 1, value);
+
+                self.set_sp(sp - 2);
+                self.inc_pc();
+            }
+            Pop { dest } => {
+                let sp = self.get_r16(SP);
+                let value = self.get_mem16(sp + 1);
+                self.set_r16(dest, value);
+
+                self.set_sp(sp + 2);
+                self.inc_pc();
+            }
+            LoadHLSPOffset { offset } => {
+                let sp = self.get_r16(SP);
+
+                let offsetu16 = (offset as i16).cast_unsigned();
+                let value = sp.wrapping_add(offsetu16);
+                self.set_r16(HL, value);
+
+                self.clear_flag(Zero);
+                self.clear_flag(SubBCD);
+
+                let sp_3_0 = u4::extract_u16(sp, 0);
+                let offset_3_0 = u4::extract_u16(offsetu16, 0);
+                let (_, half_carry) = sp_3_0.overflowing_add(offset_3_0);
+
+                let sp_7_0: u8 = (sp & 0x00FF).try_into().unwrap();
+                let offset_7_0: u8 = (offsetu16 & 0x00FF).try_into().unwrap();
+                let (_, carry) = sp_7_0.overflowing_add(offset_7_0);
+
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+
+                self.adv_pc(0x02);
             }
             _ => todo!("Missing instruction exec"),
         }
@@ -2308,5 +2429,211 @@ mod exec_tests {
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
         assert_eq!(0x02, machine.get_r16(HL));
+    }
+
+    #[rstest]
+    fn it_execs_load_imm_16(
+        #[values(BC, DE, HL, SP)] dest: R16,
+        #[values(0x0001, 0x000F)] imm: u16,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r16(dest, 0x00);
+
+        let ins = Instruction::LoadImm16 { dest, imm };
+        machine.exec(ins);
+
+        assert_eq!(imm, machine.get_r16(dest));
+        assert_eq!(0x03, machine.get_pc());
+    }
+
+    #[rstest]
+    fn it_execs_store_sp_16(#[values(0x0000, 0xFFFE)] addr: u16) {
+        let mut machine = Machine::new();
+        let value = 0xFEEF;
+        machine.set_pc(0x00);
+        machine.set_r16(SP, value);
+
+        let ins = Instruction::StoreSP16 { addr };
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_mem16(addr));
+        assert_eq!(0x03, machine.get_pc());
+    }
+
+    #[rstest]
+    fn it_execs_load_sp_hl(#[values(0x0001, 0xFFFF)] value: u16) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r16(HL, value);
+        machine.set_r16(SP, 0x00);
+
+        let ins = Instruction::LoadSPHL;
+        machine.exec(ins);
+
+        assert_eq!(value, machine.get_r16(SP));
+        assert_eq!(0x01, machine.get_pc());
+    }
+
+    #[rstest]
+    fn it_execs_push(#[values(BC, DE, HL, AF)] src: R16) {
+        let mut machine = Machine::new();
+        let value = 0xFEEF;
+
+        machine.set_pc(0x00);
+        machine.set_r16(src, value);
+        machine.set_sp(0xFFFF);
+
+        let ins = Instruction::Push { src };
+        machine.exec(ins);
+
+        let new_sp = machine.get_r16(SP);
+        assert_eq!(0xFFFD, new_sp);
+        assert_eq!(value, machine.get_mem16(new_sp + 1));
+        assert_eq!(0x01, machine.get_pc());
+    }
+    #[rstest]
+    fn it_execs_pop(#[values(BC, DE, HL, AF)] dest: R16) {
+        let mut machine = Machine::new();
+        let value = 0xFEEF;
+
+        machine.set_pc(0x00);
+        machine.set_sp(0xFFFD);
+        machine.set_mem16(0xFFFE, value);
+
+        let ins = Instruction::Pop { dest };
+        machine.exec(ins);
+
+        let new_sp = machine.get_r16(SP);
+        assert_eq!(0xFFFF, new_sp);
+        assert_eq!(value, machine.get_mem16(new_sp - 1));
+        assert_eq!(0x01, machine.get_pc());
+    }
+
+    #[rstest]
+    #[case(0xFFFF, 0x00, (false, false, false, false))]
+    // LD HL,SP+e always sets zero flag = 0
+    #[case(0xFFFF, 0x01, (false, false, true, true))]
+    #[case(0xFFFF, 0x02, (false, false, true, true))]
+    // Half carry check
+    #[case(0x000F, 0x0F, (false, false, true, false))]
+    #[case(0x00F0, 0x10, (false, false, false, true))]
+    fn it_execs_load_hlspoffset(
+        #[case] sp: u16,
+        #[case] offset: i8,
+        #[case] (zero, sub_bcd, hc_bcd, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_r16(SP, sp);
+        machine.set_r16(HL, 0);
+        machine.set_pc(0x00);
+
+        let ins = Instruction::LoadHLSPOffset { offset };
+        machine.exec(ins);
+
+        let result: i32 = ((sp as i32) + (offset as i32)) % (0x1_0000);
+        assert_eq!(0x02, machine.get_pc());
+        assert_eq!(result as u16, machine.get_r16(HL));
+        assert_eq!(
+            zero,
+            machine.get_flag(Zero),
+            "Zero flag is {}, should be {}",
+            machine.get_flag(Zero),
+            zero
+        );
+        assert_eq!(
+            sub_bcd,
+            machine.get_flag(SubBCD),
+            "Sub BCD flag is {}, should be {}",
+            machine.get_flag(SubBCD),
+            sub_bcd
+        );
+        assert_eq!(
+            hc_bcd,
+            machine.get_flag(HalfCarryBCD),
+            "Half carry flag is {}, should be {}",
+            machine.get_flag(HalfCarryBCD),
+            hc_bcd
+        );
+        assert_eq!(
+            carry,
+            machine.get_flag(Carry),
+            "Carry flag is {}, should be {}",
+            machine.get_flag(Carry),
+            carry
+        );
+    }
+}
+
+#[cfg(test)]
+mod flag_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(0x00, Zero, false)]
+    #[case(0x00, SubBCD, false)]
+    #[case(0x00, HalfCarryBCD, false)]
+    #[case(0x00, Carry, false)]
+    #[case(0xFF, Zero, true)]
+    #[case(0xFF, SubBCD, true)]
+    #[case(0xFF, HalfCarryBCD, true)]
+    #[case(0xFF, Carry, true)]
+    #[case(0b1000_0000, Zero, true)]
+    #[case(0b0100_0000, SubBCD, true)]
+    #[case(0b0010_0000, HalfCarryBCD, true)]
+    #[case(0b0001_0000, Carry, true)]
+    fn it_can_read_flags(#[case] value: u16, #[case] flag: Flag, #[case] state: bool) {
+        let mut machine = Machine::new();
+
+        machine.set_r16(AF, value);
+
+        assert_eq!(state, machine.get_flag(flag));
+    }
+
+    #[rstest]
+    #[case(Zero, 0b1000_0000)]
+    #[case(SubBCD, 0b0100_0000)]
+    #[case(HalfCarryBCD, 0b0010_0000)]
+    #[case(Carry, 0b0001_0000)]
+    fn it_can_set_flags(#[case] flag: Flag, #[case] flags: u8) {
+        let mut machine = Machine::new();
+
+        machine.set_r8(F, 0x00);
+        machine.set_flag(flag);
+
+        assert_eq!(flags, machine.get_r8(F));
+    }
+
+    #[rstest]
+    #[case(Zero, 0b0111_0000)]
+    #[case(SubBCD, 0b1011_0000)]
+    #[case(HalfCarryBCD, 0b1101_0000)]
+    #[case(Carry, 0b1110_0000)]
+    fn it_can_clear_flags(#[case] flag: Flag, #[case] flags: u8) {
+        let mut machine = Machine::new();
+
+        machine.set_r8(F, 0xF0);
+        machine.clear_flag(flag);
+
+        assert_eq!(flags, machine.get_r8(F));
+    }
+}
+
+#[cfg(test)]
+mod int_tests {
+
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(0x0000, 0x01, 0x0001)]
+    #[case(0xFFFF, 0x01, 0x0000)]
+    #[case(0xFFFF, -0x01, 0xFFFE)]
+    #[case(0xFFFF, -0x01, 0xFFFE)]
+    #[case(0xFFFF, -0x7F, 0xFF80)]
+    fn it_adds_i8_to_u16(#[case] a: u16, #[case] b: i8, #[case] result: u16) {
+        let b: u16 = (b as i16).cast_unsigned();
+        assert_eq!(result, a.wrapping_add(b));
     }
 }
