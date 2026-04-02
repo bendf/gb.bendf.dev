@@ -1,6 +1,6 @@
 use Flag::{Carry, HalfCarryBCD, SubBCD, Zero};
 use R16::{AF, BC, DE, HL, SP};
-use arbitrary_int::{u1, u2, u3, u4, u5};
+use arbitrary_int::{u1, u2, u3, u4, u5, u12};
 use wasm_bindgen::prelude::*;
 use web_sys;
 
@@ -1067,6 +1067,65 @@ impl Machine {
 
                 self.set_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
+            }
+            Inc16 { src } => {
+                let value = self.get_r16(src);
+                let res = value.wrapping_add(1u16);
+
+                self.inc_pc();
+                self.set_r16(src, res);
+            }
+
+            Dec16 { src } => {
+                let value = self.get_r16(src);
+                let res = value.wrapping_sub(1u16);
+
+                self.inc_pc();
+                self.set_r16(src, res);
+            }
+            Add16HL { src } => {
+                let base = self.get_r16(HL);
+                let value = self.get_r16(src);
+                let (res, carry) = base.overflowing_add(value);
+                self.inc_pc();
+
+                self.set_r16(HL, res);
+
+                let base_11_0 = u12::extract_u16(base, 0);
+                let src_11_0 = u12::extract_u16(value, 0);
+                let (_, half_carry) = base_11_0.overflowing_add(src_11_0);
+
+                self.assign_flag(Carry, carry);
+                self.assign_flag(HalfCarryBCD, half_carry);
+            }
+
+            AddSPImm8 { imm } => {
+                let sp = self.get_r16(SP);
+                let (res, _) = sp.overflowing_add_signed(imm as i16);
+
+                self.adv_pc(0x02);
+                self.set_r16(SP, res);
+
+                let sp_7_0: u8 = sp.to_be_bytes()[1];
+                let imm_u: u8 = imm.cast_unsigned();
+
+                let (_, carry) = sp_7_0.overflowing_add(imm_u);
+
+                // From my understanding, the game boy performs
+                // this instruction by performing an unsigned add in the low 8 bits,
+                // then adjusting the upper 8 bits based on the carry + sign from lower 8 bits.
+                // Its real weird.
+                // What this does mean though is that the half carry flag is therefore going to be
+                // set as though an unsigned addition had occured, so we emulate that here.
+                let sp_3_0 = u4::extract_u16(sp, 0);
+                let imm_3_0 = u4::extract_u8(imm.cast_unsigned(), 0);
+
+                let (_, half_carry) = sp_3_0.overflowing_add(imm_3_0);
+
+                self.clear_flag(Zero);
+                self.clear_flag(SubBCD);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
             }
 
             _ => todo!("Missing instruction exec"),
@@ -4297,6 +4356,123 @@ mod exec_tests {
 
         assert_eq!(true, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
+    }
+
+    #[rstest]
+    #[case(0x0000, 0x0001)]
+    #[case(0x0001, 0x0002)]
+    #[case(0xFFFF, 0x0000)]
+    fn it_execs_inc16(#[values(BC, DE, HL, SP)] src: R16, #[case] from: u16, #[case] to: u16) {
+        let mut machine = Machine::new();
+        machine.set_r16(src, from);
+
+        machine.set_pc(0x00);
+
+        let ins = Instruction::Inc16 { src };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(to, machine.get_r16(src));
+    }
+    #[rstest]
+    #[case(0x0001, 0x0000)]
+    #[case(0x0002, 0x0001)]
+    #[case(0x0000, 0xFFFF)]
+    fn it_execs_dec16(#[values(BC, DE, HL, SP)] src: R16, #[case] from: u16, #[case] to: u16) {
+        let mut machine = Machine::new();
+        machine.set_r16(src, from);
+
+        machine.set_pc(0x00);
+
+        let ins = Instruction::Dec16 { src };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(to, machine.get_r16(src));
+    }
+
+    #[rstest]
+    #[case(0x0001, 0x0000, 0x0001, (false, false, false, false))]
+    #[case(0x000F, 0x0001, 0x0010, (false, false, false, false))]
+    #[case(0x0F00, 0x0100, 0x1000, (false, false, true, false))]
+    #[case(0xF000, 0x1000, 0x0000, (false, false, false, true))]
+    #[case(0xFFFF, 0x0001, 0x0000, (false, false, true, true))]
+    fn it_execs_add16_hl(
+        #[values(BC, DE, SP)] src: R16,
+        #[case] x: u16,
+        #[case] y: u16,
+        #[case] res: u16,
+        #[case] (_, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_r16(src, x);
+        machine.set_r16(HL, y);
+
+        let ins = Instruction::Add16HL { src };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r16(HL));
+
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+    #[rstest]
+    #[case(0x0001,  0x0002, (false, false, false, false))]
+    #[case(0x000F,  0x001E, (false, false, false, false))]
+    #[case(0x0F00,  0x1E00, (false, false, true, false))]
+    #[case(0xF000,  0xE000, (true, false, false, true))]
+    #[case(0xFFFF,  0xFFFE, (true, false, true, true))]
+    fn it_execs_add16_hl_hl(
+        #[case] x: u16,
+        #[case] res: u16,
+        #[case] (_, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_r16(HL, x);
+
+        let ins = Instruction::Add16HL { src: HL };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r16(HL));
+
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x0000, 0x00, 0x0000, (false, false))]
+    #[case(0x0000, 0x01, 0x0001, (false, false))]
+    #[case(0x000F, 0x01, 0x0010, (true, false))]
+    #[case(0x00F0, 0x10, 0x0100, (false, true))]
+    #[case(0x00FF, 0x01, 0x0100, (true, true))]
+    #[case(0x0001, -0x01, 0x0000, (true, true))]
+    #[case(0x0000, -0x10, 0xFFF0, (false, false))]
+    #[case(0xFFF0, -0x01, 0xFFEF, (false, true))]
+    #[case(0x0000, -0x01, 0xFFFF, (false, false))]
+    fn it_execs_add16_sp(
+        #[case] sp: u16,
+        #[case] imm: i8,
+        #[case] res: u16,
+        #[case] (half_carry, carry): (bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r16(SP, sp);
+
+        let ins = Instruction::AddSPImm8 { imm };
+        machine.exec(ins);
+
+        assert_eq!(0x02, machine.get_pc());
+        assert_eq!(res, machine.get_r16(SP));
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
     }
 }
 
