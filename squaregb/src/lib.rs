@@ -509,6 +509,566 @@ impl Machine {
 
                 self.adv_pc(0x02);
             }
+
+            Add8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let (sum, carry) = u8::overflowing_add(x, y);
+
+                self.set_r8(A, sum);
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_add(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            Add8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let (sum, carry) = u8::overflowing_add(x, y);
+
+                self.set_r8(A, sum);
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_add(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            AddImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let (sum, carry) = u8::overflowing_add(x, y);
+
+                self.set_r8(A, sum);
+                self.adv_pc(0x02);
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_add(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            AddC8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let cry: u8 = self.get_flag(Carry).into();
+                let (sum, carry) = u8::overflowing_add(x, y);
+                let (sum, carry2) = u8::overflowing_add(sum, cry);
+
+                // Its a carry if either addition results in a carry.
+                let carry = carry | carry2;
+
+                self.set_r8(A, sum);
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let cry_3_0 = u4::extract_u8(cry, 0);
+                let (hc_sum, half_carry) = x_3_0.overflowing_add(y_3_0);
+                let (_, half_carry2) = hc_sum.overflowing_add(cry_3_0);
+                let half_carry = half_carry | half_carry2;
+
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            AddC8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let cry: u8 = self.get_flag(Carry).into();
+                let (sum, carry) = u8::overflowing_add(x, y);
+                let (sum, carry2) = u8::overflowing_add(sum, cry);
+
+                // Its a carry if either addition results in a carry.
+                let carry = carry | carry2;
+
+                self.set_r8(A, sum);
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let cry_3_0 = u4::extract_u8(cry, 0);
+                let (hc_sum, half_carry) = x_3_0.overflowing_add(y_3_0);
+                let (_, half_carry2) = hc_sum.overflowing_add(cry_3_0);
+                let half_carry = half_carry | half_carry2;
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            AddCImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let cry: u8 = self.get_flag(Carry).into();
+                let (sum, carry) = u8::overflowing_add(x, y);
+                let (sum, carry2) = u8::overflowing_add(sum, cry);
+
+                // Its a carry if either addition results in a carry.
+                let carry = carry | carry2;
+
+                self.set_r8(A, sum);
+                self.adv_pc(0x02);
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let cry_3_0 = u4::extract_u8(cry, 0);
+                let (hc_sum, half_carry) = x_3_0.overflowing_add(y_3_0);
+                let (_, half_carry2) = hc_sum.overflowing_add(cry_3_0);
+                let half_carry = half_carry | half_carry2;
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            Sub8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let (sum, carry) = u8::overflowing_sub(x, y);
+
+                self.set_r8(A, sum);
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            Sub8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let (sum, carry) = u8::overflowing_sub(x, y);
+
+                self.set_r8(A, sum);
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            SubImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let (sum, carry) = u8::overflowing_sub(x, y);
+
+                self.set_r8(A, sum);
+                self.adv_pc(0x02);
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            SubC8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let cry: u8 = self.get_flag(Carry).into();
+                let (res, carry) = u8::overflowing_sub(x, y);
+                let (res, carry2) = u8::overflowing_sub(res, cry);
+
+                // Its a carry if either addition results in a carry.
+                let carry = carry | carry2;
+
+                self.set_r8(A, res);
+                self.inc_pc();
+
+                self.assign_flag(Zero, res == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let cry_3_0 = u4::extract_u8(cry, 0);
+                let (hc_sum, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                let (_, half_carry2) = hc_sum.overflowing_sub(cry_3_0);
+                let half_carry = half_carry | half_carry2;
+
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            SubC8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let cry: u8 = self.get_flag(Carry).into();
+                let (res, carry) = u8::overflowing_sub(x, y);
+                let (res, carry2) = u8::overflowing_sub(res, cry);
+
+                // Its a carry if either addition results in a carry.
+                let carry = carry | carry2;
+
+                self.set_r8(A, res);
+                self.inc_pc();
+
+                self.assign_flag(Zero, res == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let cry_3_0 = u4::extract_u8(cry, 0);
+                let (hc_sum, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                let (_, half_carry2) = hc_sum.overflowing_sub(cry_3_0);
+                let half_carry = half_carry | half_carry2;
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            SubCImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let cry: u8 = self.get_flag(Carry).into();
+                let (res, carry) = u8::overflowing_sub(x, y);
+                let (res, carry2) = u8::overflowing_sub(res, cry);
+
+                // Its a carry if either addition results in a carry.
+                let carry = carry | carry2;
+
+                self.set_r8(A, res);
+                self.adv_pc(0x02);
+
+                self.assign_flag(Zero, res == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let cry_3_0 = u4::extract_u8(cry, 0);
+                let (hc_sum, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                let (_, half_carry2) = hc_sum.overflowing_sub(cry_3_0);
+                let half_carry = half_carry | half_carry2;
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            Cmp8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let (sum, carry) = u8::overflowing_sub(x, y);
+
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            Cmp8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let (sum, carry) = u8::overflowing_sub(x, y);
+
+                self.inc_pc();
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            CmpImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let (sum, carry) = u8::overflowing_sub(x, y);
+
+                self.adv_pc(0x02);
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let y_3_0 = u4::extract_u8(y, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
+                self.assign_flag(HalfCarryBCD, half_carry);
+                self.assign_flag(Carry, carry);
+            }
+            Inc8 { src } => {
+                let x = self.get_r8(src);
+                let (sum, _) = u8::overflowing_add(x, 1);
+
+                self.inc_pc();
+
+                self.set_r8(src, sum);
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let (_, half_carry) = x_3_0.overflowing_add(u4::new(1u8));
+                self.assign_flag(HalfCarryBCD, half_carry);
+            }
+            Inc8IndirectHL => {
+                let addr = self.get_r16(HL);
+                let x = self.get_mem8(addr);
+                let (sum, _) = u8::overflowing_add(x, 1);
+
+                self.inc_pc();
+
+                self.set_mem8(addr, sum);
+
+                self.assign_flag(Zero, sum == 0);
+                self.clear_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let (_, half_carry) = x_3_0.overflowing_add(u4::new(1u8));
+                self.assign_flag(HalfCarryBCD, half_carry);
+            }
+            Dec8 { src } => {
+                let x = self.get_r8(src);
+                let (sum, _) = u8::overflowing_sub(x, 1);
+
+                self.inc_pc();
+
+                self.set_r8(src, sum);
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(u4::new(1u8));
+                self.assign_flag(HalfCarryBCD, half_carry);
+            }
+            Dec8IndirectHL => {
+                let addr = self.get_r16(HL);
+                let x = self.get_mem8(addr);
+                let (sum, _) = u8::overflowing_sub(x, 1);
+
+                self.inc_pc();
+
+                self.set_mem8(addr, sum);
+
+                self.assign_flag(Zero, sum == 0);
+                self.set_flag(SubBCD);
+                let x_3_0 = u4::extract_u8(x, 0);
+                let (_, half_carry) = x_3_0.overflowing_sub(u4::new(1u8));
+                self.assign_flag(HalfCarryBCD, half_carry);
+            }
+
+            And8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let res = x & y;
+
+                self.inc_pc();
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.set_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            And8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let res = x & y;
+
+                self.inc_pc();
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.set_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            AndImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let res = x & y;
+
+                self.adv_pc(0x02);
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.set_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            Or8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let res = x | y;
+
+                self.inc_pc();
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            Or8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let res = x | y;
+
+                self.inc_pc();
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            OrImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let res = x | y;
+
+                self.adv_pc(0x02);
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            Xor8 { src } => {
+                let x = self.get_r8(A);
+                let y = self.get_r8(src);
+                let res = x ^ y;
+
+                self.inc_pc();
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            Xor8IndirectHL => {
+                let x = self.get_r8(A);
+                let addr = self.get_r16(HL);
+                let y = self.get_mem8(addr);
+                let res = x ^ y;
+
+                self.inc_pc();
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            XorImm8 { imm } => {
+                let x = self.get_r8(A);
+                let y = imm;
+                let res = x ^ y;
+
+                self.adv_pc(0x02);
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.clear_flag(Carry);
+            }
+
+            CmplCarryFlag => {
+                let carry = self.get_flag(Carry);
+
+                self.inc_pc();
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.assign_flag(Carry, !carry);
+            }
+
+            SetCarryFlag => {
+                self.inc_pc();
+                self.clear_flag(SubBCD);
+                self.clear_flag(HalfCarryBCD);
+                self.set_flag(Carry);
+            }
+
+            DecAdjAcc => {
+                let value = self.get_r8(A);
+
+                let sub = self.get_flag(SubBCD);
+                let hc = self.get_flag(HalfCarryBCD);
+                let cry = self.get_flag(Carry);
+
+                let mut res = value;
+
+                if !sub {
+                    // Push 0xA - 0xF => 0x0 - 0x6
+                    if (res & 0x0F) > 0x09 {
+                        res = res.wrapping_add(0x06);
+                    }
+
+                    if res > 0x90 {
+                        // Push 0xA0 - 0xF0 => 0x00 -> 0x60
+                        res = res.wrapping_add(0x60);
+                    }
+                }
+
+                if hc {
+                    // Honor half - carries/borrows
+                    res = if sub {
+                        res.wrapping_sub(0x06)
+                    } else {
+                        res.wrapping_add(0x06)
+                    };
+                }
+
+                if cry {
+                    // Honor carries/borrows
+                    res = if sub {
+                        res.wrapping_sub(0x60)
+                    } else {
+                        res.wrapping_add(0x60)
+                    }
+                }
+
+                self.inc_pc();
+
+                self.set_r8(A, res);
+
+                self.assign_flag(Zero, res == 0);
+                self.clear_flag(HalfCarryBCD);
+                // Res > 0x99 check here is relevant in sitatuations where the
+                // sub flag is set but neither carry nor half carry are set.
+                // We've bailed out on the DAA and need to indicate the value left has not been
+                // adjusted.
+                self.assign_flag(Carry, res > 0x99 || cry);
+            }
+
+            CmplAcc => {
+                let value = self.get_r8(A);
+
+                self.inc_pc();
+
+                self.set_r8(A, !value);
+
+                self.set_flag(SubBCD);
+                self.set_flag(HalfCarryBCD);
+            }
+
             _ => todo!("Missing instruction exec"),
         }
     }
@@ -2563,6 +3123,1180 @@ mod exec_tests {
             machine.get_flag(Carry),
             carry
         );
+    }
+
+    // ADD R8, A
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, false, false, false))]
+    #[case(0x00, 0x01, 0x01, (false, false, false, false))]
+    #[case(0xFF, 0x01, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0xFF, 0xFE,(false, false, true, true))]
+    #[case(0x0F, 0x0F, 0x1E,(false, false, true, false))]
+    fn it_execs_add_8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, y);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::Add8 { src };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // Special set of tests for Add A,A
+    #[rstest]
+    #[case(0x00, 0x00, (true, false, false, false))]
+    #[case(0x01, 0x02, (false, false, false, false))]
+    #[case(0xFF, 0xFE,  (false, false, true, true))]
+    #[case(0x0F, 0x1E, (false, false, true, false))]
+    #[case(0xF0, 0xE0, (false, false, false, true))]
+    fn it_execs_add_8_a(
+        #[case] a: u8,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, a);
+
+        let ins = Instruction::Add8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, false, false, false))]
+    #[case(0x00, 0x01, 0x01, (false, false, false, false))]
+    #[case(0xFF, 0x01, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0xFF, 0xFE,(false, false, true, true))]
+    #[case(0x0F, 0x0F, 0x1E,(false, false, true, false))]
+    fn it_execs_add8_indirect_hl(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let addr = 0x00FF;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::Add8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, false, false, false))]
+    #[case(0x00, 0x01, 0x01, (false, false, false, false))]
+    #[case(0xFF, 0x01, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0xFF, 0xFE,(false, false, true, true))]
+    #[case(0x0F, 0x0F, 0x1E,(false, false, true, false))]
+    fn it_execs_add_imm8(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::AddImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x02, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+    // ADDC R8, A
+    #[rstest]
+    #[case(0x00, 0x00, false, 0x00, (true, false, false, false))]
+    #[case(0x00, 0x00, true, 0x01, (false, false, false, false))]
+    #[case(0x00, 0x01, false, 0x01, (false, false, false, false))]
+    #[case(0x00, 0x01, true, 0x02, (false, false, false, false))]
+    #[case(0xFF, 0x00, true, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0x01, false, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0xFF, false, 0xFE,(false, false, true, true))]
+    #[case(0xFF, 0xFF, true, 0xFF,(false, false, true, true))]
+    #[case(0x0F, 0x0F, false, 0x1E,(false, false, true, false))]
+    #[case(0x0F, 0x0F, true, 0x1F,(false, false, true, false))]
+    #[case(0x0F, 0x00, true, 0x10,(false, false, true, false))]
+    fn it_execs_addc_8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, y);
+        machine.set_r8(A, x);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let ins = Instruction::AddC8 { src };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // Special set of tests for Add A,A
+    #[rstest]
+    #[case(0x00, 0x00, false, (true, false, false, false))]
+    #[case(0x00, 0x01, true, (false, false, false, false))]
+    #[case(0x01, 0x02, false, (false, false, false, false))]
+    #[case(0x01, 0x03, true, (false, false, false, false))]
+    #[case(0xFF, 0xFE, false,  (false, false, true, true))]
+    #[case(0xFF, 0xFF, true, (false, false, true, true))]
+    #[case(0x0F, 0x1E, false, (false, false, true, false))]
+    #[case(0x0F, 0x1F, true, (false, false, true, false))]
+    #[case(0xF0, 0xE0, false, (false, false, false, true))]
+    #[case(0xF0, 0xE1, true, (false, false, false, true))]
+    fn it_execs_addc_8_a(
+        #[case] a: u8,
+        #[case] sum: u8,
+        #[case] cry: bool,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, a);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let ins = Instruction::AddC8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, false, 0x00, (true, false, false, false))]
+    #[case(0x00, 0x00, true, 0x01, (false, false, false, false))]
+    #[case(0x00, 0x01, false, 0x01, (false, false, false, false))]
+    #[case(0x00, 0x01, true, 0x02, (false, false, false, false))]
+    #[case(0xFF, 0x01, false, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0x01, true, 0x01, (false, false, true, true))]
+    #[case(0xFF, 0xFF, false, 0xFE,(false, false, true, true))]
+    #[case(0xFF, 0xFF, true, 0xFF,(false, false, true, true))]
+    #[case(0x0F, 0x0F, false, 0x1E,(false, false, true, false))]
+    #[case(0x0F, 0x0F, true, 0x1F,(false, false, true, false))]
+    #[case(0x0F, 0x00, true, 0x10,(false, false, true, false))]
+    #[case(0xFF, 0x00, true, 0x00,(true, false, true, true))]
+    fn it_execs_addc8_indirect_hl(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let addr = 0x00FF;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::AddC8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, false, 0x00, (true, false, false, false))]
+    #[case(0x00, 0x00, true, 0x01, (false, false, false, false))]
+    #[case(0x00, 0x01, false, 0x01, (false, false, false, false))]
+    #[case(0x00, 0x01, true, 0x02, (false, false, false, false))]
+    #[case(0xFF, 0x01, false, 0x00, (true, false, true, true))]
+    #[case(0xFF, 0x01, true, 0x01, (false, false, true, true))]
+    #[case(0xFF, 0xFF, false, 0xFE,(false, false, true, true))]
+    #[case(0xFF, 0xFF, true, 0xFF,(false, false, true, true))]
+    #[case(0x0F, 0x0F, false, 0x1E,(false, false, true, false))]
+    #[case(0x0F, 0x0F, true, 0x1F,(false, false, true, false))]
+    #[case(0x0F, 0x00, true, 0x10,(false, false, true, false))]
+    #[case(0xFF, 0x00, true, 0x00,(true, false, true, true))]
+    fn it_execs_addc_imm8(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let ins = Instruction::AddCImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x02, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // SUB R8, A
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
+    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    #[case(0x10, 0x01, 0x0F, (false, true, true, false))]
+    fn it_execs_sub_8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, y);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::Sub8 { src };
+        machine.exec(ins);
+
+        assert_eq!(res, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // Special set of tests for Sub A,A
+    #[rstest]
+    #[case(0x00,  (true, true, false, false))]
+    #[case(0x01, (true, true, false, false))]
+    #[case(0xFF,   (true, true, false, false))]
+    fn it_execs_sub_8_a(
+        #[case] a: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, a);
+
+        let ins = Instruction::Sub8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(0, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
+    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    fn it_execs_sub8_indirect_hl(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let addr = 0x00FF;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::Sub8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(res, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
+    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    #[case(0x10, 0x01, 0x0F, (false, true, true, false))]
+    fn it_execs_sub_imm8(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::SubImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x02, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+    // SUBC R8, A
+    #[rstest]
+    #[case(0x00, 0x00, false, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x00, true, 0xFF, (false, true, true, true))]
+    #[case(0x00, 0x01, false, 0xFF, (false, true, true, true))]
+    #[case(0x00, 0x01, true, 0xFE, (false, true, true, true))]
+    #[case(0x01, 0x01, false, 0x00, (true, true, false, false))]
+    #[case(0x01, 0x01, true, 0xFF, (false, true, true, true))]
+    #[case(0xFF, 0xFF, false, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, true, 0xFF, (false, true, true, true))]
+    #[case(0x0F, 0xFF, false, 0x10, (false, true, false, true))]
+    #[case(0x10, 0xF0, false, 0x20, (false, true, false, true))]
+    #[case(0x10, 0xF0, true, 0x1F, (false, true, true, true))]
+    #[case(0x10, 0x01, false, 0x0F, (false, true, true, false))]
+    #[case(0x10, 0x00, true, 0x0F, (false, true, true, false))]
+    fn it_execs_subc_8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, y);
+        machine.set_r8(A, x);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let ins = Instruction::SubC8 { src };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // Special set of tests for SubC A,A
+    #[rstest]
+    #[case(0x00, false, 0x00, (true, true, false, false))]
+    #[case(0x00, true, 0xFF, (false, true, true, true))]
+    #[case(0x01, false, 0x00, (true, true, false, false))]
+    #[case(0x01, true, 0xFF, (false, true, true, true))]
+    #[case(0xFF, false, 0x00, (true, true, false, false))]
+    #[case(0xFF, true, 0xFF, (false, true, true, true))]
+    fn it_execs_subc_8_a(
+        #[case] a: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, a);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let ins = Instruction::SubC8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, false, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x00, true, 0xFF, (false, true, true, true))]
+    #[case(0x00, 0x01, false, 0xFF, (false, true, true, true))]
+    #[case(0x00, 0x01, true, 0xFE, (false, true, true, true))]
+    #[case(0x01, 0x01, false, 0x00, (true, true, false, false))]
+    #[case(0x01, 0x01, true, 0xFF, (false, true, true, true))]
+    #[case(0xFF, 0xFF, false, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, true, 0xFF, (false, true, true, true))]
+    #[case(0x10, 0xF0, false, 0x20, (false, true, false, true))]
+    #[case(0x10, 0xF0, true, 0x1F, (false, true, true, true))]
+    fn it_execs_subc8_indirect_hl(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let addr = 0x00FF;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::SubC8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, false, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x00, true, 0xFF, (false, true, true, true))]
+    #[case(0x00, 0x01, false, 0xFF, (false, true, true, true))]
+    #[case(0x00, 0x01, true, 0xFE, (false, true, true, true))]
+    #[case(0x01, 0x01, false, 0x00, (true, true, false, false))]
+    #[case(0x01, 0x01, true, 0xFF, (false, true, true, true))]
+    #[case(0xFF, 0xFF, false, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, true, 0xFF, (false, true, true, true))]
+    #[case(0x10, 0xF0, false, 0x20, (false, true, false, true))]
+    #[case(0x10, 0xF0, true, 0x1F, (false, true, true, true))]
+    fn it_execs_subc8_imm8(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] cry: bool,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Carry, cry);
+
+        let ins = Instruction::SubCImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(sum, machine.get_r8(A));
+        assert_eq!(0x02, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // CMP R8, A
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
+    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    #[case(0x10, 0x01, 0x0F, (false, true, true, false))]
+    fn it_execs_cp_8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, y);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::Cmp8 { src };
+        machine.exec(ins);
+
+        assert_eq!(x, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    // Special set of tests for CMP A,A
+    #[rstest]
+    #[case(0x00,  (true, true, false, false))]
+    #[case(0x01, (true, true, false, false))]
+    #[case(0xFF,   (true, true, false, false))]
+    fn it_execs_cp_8_a(
+        #[case] a: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, a);
+
+        let ins = Instruction::Cmp8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(a, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
+    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    fn it_execs_cmp8_indirect_hl(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let addr = 0x00FF;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::Cmp8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(x, machine.get_r8(A));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
+    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
+    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    #[case(0x10, 0x01, 0x0F, (false, true, true, false))]
+    fn it_execs_cmp_imm8(
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] sum: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::CmpImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(x, machine.get_r8(A));
+        assert_eq!(0x02, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x01, (false, false, false, false))]
+    #[case(0xF, 0x10, (false, false, true, false))]
+    // NB INC does not affect carry flag
+    #[case(0xFF, 0x00, (true, false, true, false))]
+    fn it_execs_inc8(
+        #[values(A, B, C, D, E, H, L)] src: R8,
+        #[case] from: u8,
+        #[case] to: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, from);
+
+        let ins = Instruction::Inc8 { src };
+        machine.exec(ins);
+
+        assert_eq!(to, machine.get_r8(src));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x01, (false, false, false, false))]
+    #[case(0xF, 0x10, (false, false, true, false))]
+    // NB INC does not affect carry flag
+    #[case(0xFF, 0x00, (true, false, true, false))]
+    fn it_execs_inc8_indirect_hl(
+        #[case] from: u8,
+        #[case] to: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+
+        machine.set_r16(HL, 0x0001);
+        machine.set_mem8(0x0001, from);
+
+        let ins = Instruction::Inc8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(to, machine.get_mem8(0x0001));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    // NB Dec does not affect carry flag
+    #[case(0x01, 0x00, (true, true, false, false))]
+    #[case(0x00, 0xFF, (false, true, true, false))]
+    #[case(0x10, 0x0F, (false, true, true, false))]
+    #[case(0x02, 0x01, (false, true, false, false))]
+    fn it_execs_dec8(
+        #[values(A, B, C, D, E, H, L)] src: R8,
+        #[case] from: u8,
+        #[case] to: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(src, from);
+
+        let ins = Instruction::Dec8 { src };
+        machine.exec(ins);
+
+        assert_eq!(to, machine.get_r8(src));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    // NB Dec does not affect carry flag.
+    #[case(0x01, 0x00, (true, true, false, false))]
+    #[case(0x00, 0xFF, (false, true, true, false))]
+    #[case(0x10, 0x0F, (false, true, true, false))]
+    #[case(0x02, 0x01, (false, true, false, false))]
+    fn it_execs_dec8_indirect_hl(
+        #[case] from: u8,
+        #[case] to: u8,
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+
+        machine.set_r16(HL, 0x0001);
+        machine.set_mem8(0x0001, from);
+
+        let ins = Instruction::Dec8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(to, machine.get_mem8(0x0001));
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0xFF)]
+    #[case(0x00, 0xFF, 0x00)]
+    #[case(0xF0, 0xF1, 0xF0)]
+    fn it_execs_and8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(src, y);
+
+        let ins = Instruction::And8 { src };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(true, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00)]
+    #[case(0xFF)]
+    #[case(0xF0)]
+    fn it_execs_and8_a(#[case] x: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::And8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(x, machine.get_r8(A));
+        assert_eq!(x == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(true, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0xFF)]
+    #[case(0x00, 0xFF, 0x00)]
+    #[case(0xF0, 0xF1, 0xF0)]
+    fn it_execs_and8_indirect_hl(#[case] x: u8, #[case] y: u8, #[case] res: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let addr = 0x0001;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::And8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(true, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0xFF)]
+    #[case(0x00, 0xFF, 0x00)]
+    #[case(0xF0, 0xF1, 0xF0)]
+    fn it_execs_and8_imm(#[case] x: u8, #[case] y: u8, #[case] res: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::AndImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(0x02, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(true, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0xFF)]
+    #[case(0x00, 0xFF, 0xFF)]
+    #[case(0xF0, 0xF1, 0xF1)]
+    fn it_execs_or8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(src, y);
+
+        let ins = Instruction::Or8 { src };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00)]
+    #[case(0xFF)]
+    #[case(0xF0)]
+    fn it_execs_or8_a(#[case] x: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::Or8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(x, machine.get_r8(A));
+        assert_eq!(x == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0xFF)]
+    #[case(0x00, 0xFF, 0xFF)]
+    #[case(0xF0, 0xF1, 0xF1)]
+    fn it_execs_or8_indirect_hl(#[case] x: u8, #[case] y: u8, #[case] res: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let addr = 0x0001;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::Or8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0xFF)]
+    #[case(0x00, 0xFF, 0xFF)]
+    #[case(0xF0, 0xF1, 0xF1)]
+    fn it_execs_or8_imm(#[case] x: u8, #[case] y: u8, #[case] res: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::OrImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(0x02, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0x00)]
+    #[case(0x00, 0xFF, 0xFF)]
+    #[case(0xF0, 0x0F, 0xFF)]
+    fn it_execs_xor8(
+        #[values(B, C, D, E, H, L)] src: R8,
+        #[case] x: u8,
+        #[case] y: u8,
+        #[case] res: u8,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+        machine.set_r8(src, y);
+
+        let ins = Instruction::Xor8 { src };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00)]
+    #[case(0xFF)]
+    #[case(0xF0)]
+    fn it_execs_xor8_a(#[case] x: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::Xor8 { src: A };
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+
+        assert_eq!(0, machine.get_r8(A));
+        assert_eq!(true, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0x00)]
+    #[case(0x00, 0xFF, 0xFF)]
+    #[case(0xF0, 0x0F, 0xFF)]
+    fn it_execs_xor8_indirect_hl(#[case] x: u8, #[case] y: u8, #[case] res: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let addr = 0x0001;
+        machine.set_r16(HL, addr);
+        machine.set_mem8(addr, y);
+
+        let ins = Instruction::Xor8IndirectHL;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x00, 0x00, 0x00)]
+    #[case(0xFF, 0xFF, 0x00)]
+    #[case(0x00, 0xFF, 0xFF)]
+    #[case(0xF0, 0x0F, 0xFF)]
+    fn it_execs_xor8_imm(#[case] x: u8, #[case] y: u8, #[case] res: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, x);
+
+        let ins = Instruction::XorImm8 { imm: y };
+        machine.exec(ins);
+
+        assert_eq!(0x02, machine.get_pc());
+        assert_eq!(res, machine.get_r8(A));
+
+        assert_eq!(res == 0, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_ccf(
+        #[values(true, false)] sub_bcd: bool,
+        #[values(true, false)] half_carry: bool,
+        #[values(true, false)] carry: bool,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(F, 0);
+
+        machine.assign_flag(SubBCD, sub_bcd);
+        machine.assign_flag(HalfCarryBCD, half_carry);
+        machine.assign_flag(Carry, carry);
+
+        let ins = Instruction::CmplCarryFlag;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(!carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_scf(
+        #[values(true, false)] sub_bcd: bool,
+        #[values(true, false)] half_carry: bool,
+        #[values(true, false)] carry: bool,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(F, 0);
+
+        machine.assign_flag(SubBCD, sub_bcd);
+        machine.assign_flag(HalfCarryBCD, half_carry);
+        machine.assign_flag(Carry, carry);
+
+        let ins = Instruction::SetCarryFlag;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(true, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    // 0x00 + 0x00
+    #[case(0x00, 0x00, (true, false, false, false), (true, false, false, false))]
+    // 0x00 + 0x01
+    #[case(0x01, 0x01, (false, false, false, false), (false, false, false, false))]
+    // 0x09 + 0x01
+    #[case(0x0A, 0x10, (false, false, false, false), (false, false, false, false))]
+    // 0x99 + 0x01
+    #[case(0x9A, 0x00, (false, false, false, false), (true, false, false, false))]
+    // 0x09 + 0x09
+    #[case(0x12, 0x18, (false, false, true, false), (false, false, false,  false))]
+    // 0x90 + 0x90
+    #[case(0x20, 0x80, (false, false, false, true), (false, false, false,  true))]
+    // 0x99 + 0x99
+    #[case(0x32, 0x98, (false, false, true, true), (false, false, false,  true))]
+    // 0x00 - 0x00
+    #[case(0x00, 0x00, (true, true, false, false), (true, true, false,  false))]
+    // 0x00 - 0x01
+    #[case(0xFF, 0x99, (false, true, true, true), (false, true, false, true))]
+    // 0x10 - 0x01
+    #[case(0x0F, 0x09, (false, true, true, false), (false, true, false, false))]
+    // 0x00 - 0x10
+    #[case(0xF0, 0x90, (false, true, false, true), (false, true, false, true))]
+    // 0x00 - 0x99
+    #[case(0x67, 0x01, (false, true, true, true), (false, true, false, true))]
+    // Edge case, we have sub set, but have not borrowed (no carry flag set), but value is > 9
+    // Game boy will not actually adjust in this case.
+    #[case(0xF0, 0xF0, (false, true, false, false), (false, true, false, true))]
+    fn it_execs_daa(
+        #[case] from: u8,
+        #[case] to: u8,
+        #[case] (z, sub, hc, cry): (bool, bool, bool, bool),
+        #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(F, 0);
+        machine.assign_flag(Zero, z);
+        machine.assign_flag(SubBCD, sub);
+        machine.assign_flag(HalfCarryBCD, hc);
+        machine.assign_flag(Carry, cry);
+
+        machine.set_r8(A, from);
+
+        let ins = Instruction::DecAdjAcc;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(to, machine.get_r8(A));
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(sub_bcd, machine.get_flag(SubBCD));
+        assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_cmpl_acc(#[values(0x00, 0xFF, 0xF0, 0x0F)] value: u8) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x00);
+        machine.set_r8(A, value);
+
+        let ins = Instruction::CmplAcc;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(!value, machine.get_r8(A));
+
+        assert_eq!(true, machine.get_flag(SubBCD));
+        assert_eq!(true, machine.get_flag(HalfCarryBCD));
     }
 }
 
