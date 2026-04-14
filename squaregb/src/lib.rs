@@ -20,6 +20,22 @@ impl Into<u8> for Flag {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[repr(u8)]
+pub enum InterruptFlag {
+    VBlank = 0,
+    LCD = 1,
+    Timer = 2,
+    Serial = 3,
+    Joypad = 4,
+}
+
+impl Into<u8> for InterruptFlag {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum R16 {
     BC,
     DE,
@@ -143,11 +159,28 @@ impl Into<u8> for Cond {
 
 use Cond::*;
 
-// type Cond = u8;
-// const NZ: Cond = 0b00;
-// const NCARRY: Cond = 0b10;
-// const Z: Cond = 0b01;
-// const CARRY: Cond = 0b11;
+/// TODO: This could be a u8 with bit flags
+struct ButtonState {
+    a: bool,
+    b: bool,
+    select: bool,
+    start: bool,
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+}
+
+enum Button {
+    A,
+    B,
+    SELECT,
+    START,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
+}
 
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
@@ -172,6 +205,9 @@ pub struct Machine {
     gp_registers: [u8; 8],
     sp: u16,
     memory: [u8; 65536],
+    ime: bool,
+    halted: bool,
+    stopped: bool,
 }
 
 impl Machine {
@@ -181,6 +217,9 @@ impl Machine {
             gp_registers: [0; 8],
             sp: 0,
             memory: [0; 65536],
+            ime: false,
+            halted: false,
+            stopped: false,
         }
     }
 
@@ -216,22 +255,42 @@ impl Machine {
         }
     }
 
+    pub fn is_running(&self) -> bool {
+        !self.halted
+    }
+
+    pub fn halt(&mut self) {
+        self.halted = true;
+    }
+
+    pub fn start(&mut self) {
+        self.halted = false;
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.stopped
+    }
+
     pub fn get_mem8(&self, addr: u16) -> u8 {
         self.memory[addr as usize]
     }
 
     pub fn get_mem16(&self, addr: u16) -> u16 {
-        let addr = addr as usize;
-        u16::from_le_bytes([self.memory[addr], self.memory[addr + 1]])
+        let addr = addr;
+        u16::from_le_bytes([
+            self.memory[addr as usize],
+            self.memory[addr.wrapping_add(1) as usize],
+        ])
     }
 
     pub fn set_mem16(&mut self, addr: u16, value: u16) {
-        let addr = addr as usize;
+        let addr_low = addr as usize;
+        let addr_high = addr.wrapping_add(1) as usize;
 
         let [low, high] = value.to_le_bytes();
 
-        self.memory[addr] = low;
-        self.memory[addr + 1] = high;
+        self.memory[addr_low] = low;
+        self.memory[addr_high] = high;
     }
 
     pub fn set_mem8(&mut self, addr: u16, value: u8) {
@@ -267,6 +326,22 @@ impl Machine {
             }
             SP => self.set_sp(value),
         }
+    }
+
+    pub fn clear_ime(&mut self) {
+        self.ime = false;
+    }
+
+    pub fn set_ime(&mut self) {
+        self.ime = true;
+    }
+
+    pub fn assign_ime(&mut self, value: bool) {
+        self.ime = value
+    }
+
+    pub fn get_ime(&self) -> bool {
+        self.ime
     }
 
     pub fn get_pc(&self) -> u16 {
@@ -309,11 +384,11 @@ impl Machine {
     }
 
     pub fn inc_pc(&mut self) {
-        self.pc = self.pc + 1
+        self.pc = self.pc.wrapping_add(0x01);
     }
 
     pub fn adv_pc(&mut self, offset: u16) {
-        self.pc = self.pc + offset
+        self.pc = self.pc.wrapping_add(offset);
     }
 
     pub fn exec(&mut self, instruction: Instruction) {
@@ -1522,6 +1597,175 @@ impl Machine {
                 self.set_mem8(addr, res);
 
                 // No flags affected.
+            }
+
+            JP { addr } => {
+                self.set_pc(addr);
+            }
+
+            JPHL => {
+                let addr = self.get_r16(HL);
+                self.set_pc(addr);
+            }
+
+            JPCC { cond, addr } => {
+                let zero = self.get_flag(Zero);
+                let carry = self.get_flag(Carry);
+
+                let res = match cond {
+                    Cond::Z => zero,
+                    Cond::NZ => !zero,
+                    Cond::CARRY => carry,
+                    Cond::NCARRY => !carry,
+                };
+
+                if res {
+                    self.set_pc(addr);
+                } else {
+                    self.adv_pc(3);
+                }
+            }
+
+            JR { offset } => {
+                let pc = self.get_pc();
+
+                let (pc, _) = pc.overflowing_add_signed(offset as i16);
+                self.set_pc(pc);
+            }
+
+            JRCC { cond, offset } => {
+                let zero = self.get_flag(Zero);
+                let carry = self.get_flag(Carry);
+
+                let res = match cond {
+                    Cond::Z => zero,
+                    Cond::NZ => !zero,
+                    Cond::CARRY => carry,
+                    Cond::NCARRY => !carry,
+                };
+
+                if res {
+                    let pc = self.get_pc();
+                    let (pc, _) = pc.overflowing_add_signed(offset as i16);
+                    self.set_pc(pc);
+                } else {
+                    self.adv_pc(2);
+                }
+            }
+            Call { addr } => {
+                let sp = self.get_r16(SP);
+                let pc = self.get_pc();
+
+                let ret_address = pc.wrapping_add(3);
+
+                let new_sp = sp.wrapping_sub(2);
+
+                self.set_r16(SP, new_sp);
+                self.set_mem16(new_sp, ret_address);
+
+                self.set_pc(addr);
+            }
+
+            CallCC { addr, cond } => {
+                let sp = self.get_r16(SP);
+                let pc = self.get_pc();
+
+                let zero = self.get_flag(Zero);
+                let carry = self.get_flag(Carry);
+
+                let res = match cond {
+                    Cond::Z => zero,
+                    Cond::NZ => !zero,
+                    Cond::CARRY => carry,
+                    Cond::NCARRY => !carry,
+                };
+
+                if res {
+                    let ret_address = pc.wrapping_add(3);
+                    let new_sp = sp.wrapping_sub(2);
+
+                    self.set_sp(new_sp);
+                    self.set_mem16(new_sp, ret_address);
+
+                    self.set_pc(addr);
+                } else {
+                    self.adv_pc(3);
+                }
+            }
+
+            Ret => {
+                let sp = self.get_r16(SP);
+                let return_address = self.get_mem16(sp);
+
+                self.set_pc(return_address);
+                self.set_sp(sp.wrapping_add(2));
+            }
+
+            RetCC { cond } => {
+                let sp = self.get_r16(SP);
+                let return_address = self.get_mem16(sp);
+
+                let zero = self.get_flag(Zero);
+                let carry = self.get_flag(Carry);
+
+                let res = match cond {
+                    Cond::Z => zero,
+                    Cond::NZ => !zero,
+                    Cond::CARRY => carry,
+                    Cond::NCARRY => !carry,
+                };
+
+                if res {
+                    self.set_pc(return_address);
+                    self.set_sp(sp.wrapping_add(2));
+                } else {
+                    self.inc_pc();
+                }
+            }
+
+            RetI => {
+                let sp = self.get_r16(SP);
+                let return_address = self.get_mem16(sp);
+
+                self.set_pc(return_address);
+                self.set_sp(sp.wrapping_add(2));
+
+                self.set_ime();
+            }
+
+            RST { addr } => {
+                let sp = self.get_r16(SP);
+                let pc = self.get_pc();
+
+                let ret_address = pc.wrapping_add(1);
+                let new_sp = sp.wrapping_sub(2);
+
+                self.set_r16(SP, new_sp);
+                self.set_mem16(new_sp, ret_address);
+
+                self.set_pc(addr as u16);
+            }
+
+            Halt => {
+                self.inc_pc();
+
+                if self.get_ime() {
+                    self.halt();
+                }
+            }
+
+            DI => {
+                self.inc_pc();
+                self.clear_ime();
+            }
+
+            EI => {
+                self.inc_pc();
+                self.set_ime();
+            }
+
+            NOP => {
+                self.inc_pc();
             }
 
             _ => todo!("Missing instruction exec"),
@@ -5549,6 +5793,470 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_jp(#[values(0x0000, 0x0001, 0x8000, 0xFFFF)] addr: u16) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(0x00);
+
+        let ins = Instruction::JP { addr };
+        machine.exec(ins);
+
+        assert_eq!(addr, machine.get_pc());
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_jp_hl(#[values(0x0000, 0x0001, 0x8000, 0xFFFF)] addr: u16) {
+        let mut machine = Machine::new();
+
+        machine.set_r16(HL, addr);
+        machine.set_pc(0x00);
+
+        let ins = Instruction::JPHL;
+        machine.exec(ins);
+
+        assert_eq!(addr, machine.get_pc());
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x0000, (false, false), NZ, 0x0000)]
+    #[case(0x0000, (true,  false), Z, 0x0000)]
+    #[case(0x8000, (false, false), Z, 0x0003)]
+    #[case(0x8000, (true,  false), Z, 0x8000)]
+    #[case(0x8000, (false,  false), NZ, 0x8000)]
+    #[case(0x1000, (false, false), CARRY, 0x0003)]
+    #[case(0x1000, (false, true), CARRY, 0x1000)]
+    #[case(0x1000, (false, false), NCARRY, 0x1000)]
+    #[case(0x1000, (false, true), NCARRY, 0x0003)]
+    fn it_execs_jp_cc(
+        #[case] target: u16,
+        #[case] (zero, carry): (bool, bool),
+        #[case] cond: Cond,
+        #[case] pc: u16,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(0x0000);
+        machine.assign_flag(Zero, zero);
+        machine.assign_flag(Carry, carry);
+
+        let ins = Instruction::JPCC { cond, addr: target };
+        machine.exec(ins);
+
+        assert_eq!(pc, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case(0x0000, 0x00, 0x0000)]
+    #[case(0x0000, 0x01, 0x0001)]
+    #[case(0x0000, 0x7F, 0x007F)]
+    #[case(0x0000, -0x01, 0xFFFF)]
+    #[case(0x0000, -0x80, 0xFF80)]
+    fn it_execs_jr(#[case] from: u16, #[case] offset: i8, #[case] addr: u16) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(from);
+
+        let ins = Instruction::JR { offset };
+        machine.exec(ins);
+
+        assert_eq!(addr, machine.get_pc());
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case((0x0000, 0x00), (false, false), NZ, 0x0000)]
+    #[case((0x0000, 0x00), (true,  false), Z, 0x0000)]
+    #[case((0x8000, 0x01), (false, false), Z, 0x8002)]
+    #[case((0x8000, 0x01), (true,  false), Z, 0x8001)]
+    #[case((0x8000, 0x7F), (true,  false), Z, 0x807F)]
+    #[case((0x8000, -0x80), (true,  false), Z, 0x7F80)]
+    #[case((0x8000, 0x01), (false,  false), NZ, 0x8001)]
+    #[case((0x1000, 0x7F), (false, false), CARRY, 0x1002)]
+    #[case((0x1000, 0x7F), (false, true), CARRY, 0x107F)]
+    #[case((0x0000, -0x01), (false, false), NCARRY, 0xFFFF)]
+    #[case((0x0000, -0x01), (false, true), NCARRY, 0x0002)]
+    fn it_execs_jr_cc(
+        #[case] (from, offset): (u16, i8),
+        #[case] (zero, carry): (bool, bool),
+        #[case] cond: Cond,
+        #[case] pc: u16,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(from);
+        machine.assign_flag(Zero, zero);
+        machine.assign_flag(Carry, carry);
+
+        let ins = Instruction::JRCC { cond, offset };
+        machine.exec(ins);
+
+        assert_eq!(pc, machine.get_pc());
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_call(
+        #[values(0x0000, 0x0001, 0xFFFE, 0x8000)] pc: u16,
+        #[values(0x0000, 0x0001, 0xFFFE, 0x8000)] addr: u16,
+        #[values(0x0000, 0xFFFE, 0x8000)] sp: u16,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(pc);
+        machine.set_r16(SP, sp);
+
+        let ins = Instruction::Call { addr };
+        machine.exec(ins);
+
+        assert_eq!(addr, machine.get_pc());
+        let new_sp = machine.get_r16(SP);
+        assert_eq!(sp.wrapping_sub(2), new_sp);
+        assert_eq!(pc.wrapping_add(3), machine.get_mem16(new_sp));
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+    #[rstest]
+    #[case((false, false), NZ)]
+    #[case((true, false), Z)]
+    #[case((false, false), NCARRY)]
+    #[case((false, true), CARRY)]
+    fn it_execs_call_cc_cond_met(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] target_addr: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[case] (zero, carry): (bool, bool),
+        #[case] cond: Cond,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(current_pc);
+        machine.set_sp(current_sp);
+        machine.assign_flag(Zero, zero);
+        machine.assign_flag(Carry, carry);
+
+        let ins = Instruction::CallCC {
+            cond,
+            addr: target_addr,
+        };
+        machine.exec(ins);
+
+        assert_eq!(target_addr, machine.get_pc());
+        let new_sp = machine.get_r16(SP);
+        assert_eq!(current_sp.wrapping_sub(2), new_sp);
+        assert_eq!(current_pc.wrapping_add(3), machine.get_mem16(new_sp));
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case((true, false), NZ)]
+    #[case((false, false), Z)]
+    #[case((false, true), NCARRY)]
+    #[case((false, false), CARRY)]
+    fn it_execs_call_cc_cond_not_met(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] target_addr: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[case] (zero, carry): (bool, bool),
+        #[case] cond: Cond,
+    ) {
+        let mut machine = Machine::new();
+        machine.set_pc(current_pc);
+        machine.set_sp(current_sp);
+        machine.assign_flag(Zero, zero);
+        machine.assign_flag(Carry, carry);
+
+        let ins = Instruction::CallCC {
+            cond,
+            addr: target_addr,
+        };
+        machine.exec(ins);
+
+        assert_eq!(current_pc.wrapping_add(3), machine.get_pc());
+        assert_eq!(current_sp, machine.get_r16(SP));
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_ret(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] return_address: u16,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(current_pc);
+        machine.set_sp(current_sp);
+
+        machine.set_mem16(current_sp, return_address);
+
+        let ins = Instruction::Ret;
+        machine.exec(ins);
+
+        assert_eq!(return_address, machine.get_pc());
+        assert_eq!(current_sp.wrapping_add(2), machine.get_r16(SP));
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case((false, false), NZ)]
+    #[case((true, false), Z)]
+    #[case((false, false), NCARRY)]
+    #[case((false, true), CARRY)]
+    fn it_execs_ret_cc_cond_met(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] return_address: u16,
+        #[case] (zero, carry): (bool, bool),
+        #[case] cond: Cond,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(current_pc);
+        machine.set_sp(current_sp);
+        machine.assign_flag(Zero, zero);
+        machine.assign_flag(Carry, carry);
+
+        machine.set_mem16(current_sp, return_address);
+
+        let ins = Instruction::RetCC { cond };
+        machine.exec(ins);
+
+        assert_eq!(return_address, machine.get_pc());
+        assert_eq!(current_sp.wrapping_add(2), machine.get_r16(SP));
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    #[case((true, false), NZ)]
+    #[case((false, false), Z)]
+    #[case((false, true), NCARRY)]
+    #[case((false, false), CARRY)]
+    fn it_execs_ret_cc_cond_not_met(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] return_address: u16,
+        #[case] (zero, carry): (bool, bool),
+        #[case] cond: Cond,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(current_pc);
+        machine.set_sp(current_sp);
+        machine.assign_flag(Zero, zero);
+        machine.assign_flag(Carry, carry);
+
+        machine.set_mem16(current_sp, return_address);
+
+        let ins = Instruction::RetCC { cond };
+        machine.exec(ins);
+
+        assert_eq!(current_pc.wrapping_add(1), machine.get_pc());
+        assert_eq!(current_sp, machine.get_r16(SP));
+
+        assert_eq!(zero, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(carry, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_reti(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] return_address: u16,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(current_pc);
+        machine.set_sp(current_sp);
+        machine.clear_ime();
+
+        machine.set_mem16(current_sp, return_address);
+
+        let ins = Instruction::RetI;
+        machine.exec(ins);
+
+        assert_eq!(return_address, machine.get_pc());
+        assert_eq!(current_sp.wrapping_add(2), machine.get_r16(SP));
+        assert!(machine.get_ime());
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_restart(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_sp: u16,
+        #[values(0x00, 0x80, 0x18, 0x20, 0x28, 0x30, 0x38)] addr: u8,
+    ) {
+        let mut machine = Machine::new();
+
+        machine.set_pc(current_pc);
+        machine.set_r16(SP, current_sp);
+
+        let ins = Instruction::RST { addr };
+        machine.exec(ins);
+
+        assert_eq!(addr as u16, machine.get_pc());
+        let new_sp = machine.get_r16(SP);
+        assert_eq!(current_sp.wrapping_sub(2), new_sp);
+        assert_eq!(current_pc.wrapping_add(1), machine.get_mem16(new_sp));
+
+        assert_eq!(false, machine.get_flag(Zero));
+        assert_eq!(false, machine.get_flag(SubBCD));
+        assert_eq!(false, machine.get_flag(HalfCarryBCD));
+        assert_eq!(false, machine.get_flag(Carry));
+    }
+
+    #[rstest]
+    fn it_execs_halt_interrupts_enabled(#[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16) {
+        let mut machine = Machine::new();
+        machine.set_ime();
+        machine.set_pc(current_pc);
+
+        let ins = Instruction::Halt;
+        machine.exec(ins);
+
+        assert_eq!(current_pc.wrapping_add(1), machine.get_pc());
+        assert_eq!(false, machine.is_running());
+    }
+
+    #[rstest]
+    /// This isn't quite right
+    /// The actual game boy loads the bytes of the instruction one at a time
+    /// incrementing the PC each time
+    /// So can lead to much much weirder cases.
+    /// It actually leads to cases where the next instruction is executed more than once,
+    /// or incorrectly.
+    /// We just choose to skip to the next instruction instead.
+    /// We act like the Halt is a NOP
+    /// TODO: Update this for more accurate emulation
+    fn it_execs_halt_interrupts_disabled(
+        #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
+    ) {
+        let mut machine = Machine::new();
+        machine.clear_ime();
+        machine.set_pc(current_pc);
+
+        let ins = Instruction::Halt;
+        machine.exec(ins);
+
+        assert_eq!(current_pc.wrapping_add(1), machine.get_pc());
+        assert_eq!(true, machine.is_running());
+    }
+
+    #[rstest]
+    fn it_execs_stop() {
+        todo!("TODO: exec stop");
+        // let mut machine = Machine::new();
+        // machine.set_ime();
+        //
+        // let ins = Instruction::Stop { ignore: 0 };
+        // machine.exec(ins);
+        //
+        // assert!(machine.is_stopped());
+        //
+        // machine.depress_button(Button::A);
+        // machine.set_int_flag(InterruptFlag::Joypad);
+        // // Pressing any button clears the STOP
+        // assert_eq!(false, machine.is_stopped());
+    }
+
+    #[rstest]
+    fn it_execs_disable_interrupts(#[values(true, false)] ime: bool) {
+        let mut machine = Machine::new();
+        machine.assign_ime(ime);
+
+        let ins = Instruction::DI;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
+        assert_eq!(false, machine.get_ime());
+    }
+
+    // #[rstest]
+    // fn it_execs_enable_disable_interrupts() {
+    //     let mut machine = Machine::new();
+    //     machine.clear_ime();
+    //
+    //     let ins = Instruction::EI;
+    //     machine.exec(ins);
+    //
+    //     // Effect should be delayed by 1 instruction.
+    //     assert_eq!(false, machine.get_ime());
+    //
+    //     let ins2 = Instruction::DI;
+    //     machine.exec(ins2);
+    //
+    //     // DI overrides EI. DI is not delayed
+    //     assert_eq!(false, machine.get_ime());
+    // }
+
+    #[rstest]
+    // TODO: Implement delayed EI behaviour
+    fn it_execs_enable_interrupts() {
+        let mut machine = Machine::new();
+        machine.clear_ime();
+
+        let ins = Instruction::EI;
+        machine.exec(ins);
+
+        assert_eq!(true, machine.get_ime());
+    }
+
+    #[rstest]
+    fn it_execs_nop() {
+        let mut machine = Machine::new();
+
+        let ins = Instruction::NOP;
+        machine.exec(ins);
+
+        assert_eq!(0x01, machine.get_pc());
     }
 }
 
