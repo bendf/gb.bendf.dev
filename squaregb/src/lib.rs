@@ -231,21 +231,36 @@ impl Machine {
         self.pc = addr;
     }
 
-    pub fn eval(&mut self, steps: usize) {
+    pub fn step(&mut self) {
         let pc = self.get_pc();
+        let res = Instruction::decode(&self.memory[pc as usize..]);
 
-        for _ in 0..steps {
-            let res = Instruction::decode(&self.memory[pc as usize..]);
-
-            match res {
-                Ok(ins) => {
-                    println!("{ins:?}");
-                    self.exec(ins);
-                }
-                Err(e) => {
-                    panic!("Failed to decode instruction {e:?}")
-                }
+        match res {
+            Ok(ins) => {
+                self.exec(ins);
             }
+            Err(e) => {
+                panic!("Failed to decode instruction {e:?}")
+            }
+        }
+    }
+
+    pub fn eval(&mut self, steps: usize) {
+        for _ in 0..steps {
+            self.step();
+        }
+    }
+
+    pub fn run_until_pc(&mut self, target_pc: u16, max_steps: usize) {
+        let mut steps_taken = 0;
+
+        while self.get_pc() != target_pc {
+            if steps_taken > max_steps {
+                panic!("Too many steps taken");
+            }
+
+            steps_taken += 1;
+            self.step();
         }
     }
 
