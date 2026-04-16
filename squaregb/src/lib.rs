@@ -231,7 +231,23 @@ impl Machine {
         self.pc = addr;
     }
 
-    pub fn eval(&self, _steps: usize) {}
+    pub fn eval(&mut self, steps: usize) {
+        let pc = self.get_pc();
+
+        for _ in 0..steps {
+            let res = Instruction::decode(&self.memory[pc as usize..]);
+
+            match res {
+                Ok(ins) => {
+                    println!("{ins:?}");
+                    self.exec(ins);
+                }
+                Err(e) => {
+                    panic!("Failed to decode instruction {e:?}")
+                }
+            }
+        }
+    }
 
     pub fn get_r8(&self, reg: R8) -> u8 {
         self.gp_registers[reg as usize]
@@ -401,7 +417,7 @@ impl Machine {
             }
             LoadImm8 { dest, imm } => {
                 self.set_r8(dest, imm);
-                self.inc_pc();
+                self.adv_pc(2);
             }
             LoadIndirectHL { dest } => {
                 let addr = self.get_r16(HL);
@@ -3374,7 +3390,7 @@ mod exec_tests {
         machine.exec(ins);
 
         assert_eq!(imm, machine.get_r8(dest));
-        assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_pc(), 0x02);
     }
 
     #[rstest]
@@ -3824,7 +3840,6 @@ mod exec_tests {
         );
     }
 
-    // ADD R8, A
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, false, false, false))]
     #[case(0x00, 0x01, 0x01, (false, false, false, false))]
