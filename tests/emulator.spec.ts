@@ -18,9 +18,8 @@ test("Emulator test rom shows checkerboard", async ({ page }) => {
 
   page.waitForTimeout(1000);
 
-  await page.getByLabel("Load Checkerboard ROM").click();
-
-  await page.getByText("Run").click();
+  await page.getByText("Load Checkerboard ROM").click();
+  await page.getByTestId("button-run-emulator").click();
 
   page.waitForTimeout(1000);
 
