@@ -9,25 +9,27 @@
 		<button id="run-wasm-test" data-testid="run-wasm-test">Run wasm test</button>
 		<p id="wasm-console" data-testid="wasm-console"></p>
 
-		<main id="squaregb-root">
-			<button>Load Checkerboard ROM</button>
+		<div id="squaregb-wrapper">
+			<button id="load-checkerboard-rom">Load Checkerboard ROM</button>
 			<button data-testid="button-run-emulator">Run</button>
-			<canvas id="squaregb-screen" width="160" height="144"></canvas>
-			<div id="squaregb-dpad">
-				<button id="squaregb-up">UP</button>
-				<button id="squaregb-down">DOWN</button>
-				<button id="squaregb-left">LEFT</button>
-				<button id="squaregb-right">RIGHT</button>
-			</div>
-			<div id="squaregb-ab">
-				<button id="squaregb-a">A</button>
-				<button id="squaregb-b">B</button>
-			</div>
-			<div id="squaregb-selstart">
-				<button id="squaregb-select">SELECT</button>
-				<button id="squaregb-start">START</button>
-			</div>
-		</main>
+			<main id="squaregb-root">
+				<canvas id="squaregb-screen" width="160" height="144"></canvas>
+				<div id="squaregb-dpad">
+					<button id="squaregb-up">UP</button>
+					<button id="squaregb-down">DOWN</button>
+					<button id="squaregb-left">LEFT</button>
+					<button id="squaregb-right">RIGHT</button>
+				</div>
+				<div id="squaregb-ab">
+					<button id="squaregb-a">A</button>
+					<button id="squaregb-b">B</button>
+				</div>
+				<div id="squaregb-selstart">
+					<button id="squaregb-select">SELECT</button>
+					<button id="squaregb-start">START</button>
+				</div>
+			</main>
+		</div>
 
 		<aside>
 			<h2>Tasks</h2>
@@ -49,16 +51,30 @@
 		</aside>
 
 		<script type="module">
-			import init, { say_hello } from './wasm/squaregb.js';
+			import init, { say_hello, render_frame, get_screen_data } from './wasm/squaregb.js';
 			
-			async function run() {
+			function render_screen() {
+				render_frame();
+				const screenData = get_screen_data();
+				const canvas = document.getElementById("squaregb-screen");
+				const ctx = canvas.getContext("2d");
+				const imageData = new ImageData(screenData, 160, 144, { colorSpace: "srgb", pixelFormat: "rgba-unorm8"});
+				ctx.putImageData(imageData,0,0);
+				
+			}
+			
+			async function setup() {
 				await init();
 				
 				document.getElementById("run-wasm-test").addEventListener("click",(e) => {
 					document.getElementById("wasm-console").innerText = say_hello();
 					});
+					
+					render_screen();
+					
 				}
-				run();
+				
+				setup();
 		</script>
 	</body>
 </html>

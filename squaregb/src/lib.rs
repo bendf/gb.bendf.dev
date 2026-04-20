@@ -1,6 +1,8 @@
+#[allow(static_mut_refs)]
 use Flag::{Carry, HalfCarryBCD, SubBCD, Zero};
 use R16::{AF, BC, DE, HL, SP};
 use arbitrary_int::{u1, u2, u3, u4, u5, u12};
+use js_sys;
 use wasm_bindgen::prelude::*;
 use web_sys;
 
@@ -198,6 +200,39 @@ fn main() -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub fn say_hello() -> String {
     return String::from("Hello, World!");
+}
+
+const SCREEN_WIDTH: usize = 160;
+const SCREEN_HEIGHT: usize = 144;
+const BYTES_PER_PIXEL: usize = 4;
+const SCREEN_BUFFER_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT * BYTES_PER_PIXEL;
+
+static mut SCREEN_BUFFER: [u8; SCREEN_BUFFER_SIZE] = [0; SCREEN_BUFFER_SIZE];
+
+#[wasm_bindgen]
+pub fn render_frame() {
+    for i in 0..SCREEN_WIDTH {
+        for j in 0..SCREEN_HEIGHT {
+            let base = ((j * SCREEN_WIDTH) + i) * BYTES_PER_PIXEL; //i j * BYTES_PER_PIXEL;
+
+            unsafe {
+                let pixel = &mut SCREEN_BUFFER[base..];
+                pixel[0] = 0x00;
+                pixel[1] = 0x00;
+                pixel[2] = 0x00;
+                pixel[3] = 0xFF;
+            }
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub fn get_screen_data() -> js_sys::Uint8ClampedArray {
+    // TODO: We're violating rusts XOR aliasing rule here. Wrap this in some way.
+    #[allow(static_mut_refs)]
+    unsafe {
+        js_sys::Uint8ClampedArray::new_from_slice(&SCREEN_BUFFER)
+    }
 }
 
 pub struct Machine {
