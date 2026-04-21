@@ -8,6 +8,14 @@ use wasm_bindgen::prelude::*;
 use web_sys;
 
 pub const VIDEO_RAM_BASE: usize = 0x8000;
+pub const TILE_MAP_BASE: usize = 0x9800;
+
+pub const TILE_MAP_WIDTH: usize = 32;
+pub const TILE_MAP_HEIGHT: usize = 32;
+// pub const TILE_MAP_B_BASE: usize = 0x9C00;
+
+pub const SCREEN_WIDTH: usize = 160;
+pub const SCREEN_HEIGHT: usize = 144;
 
 #[derive(Debug, PartialEq)]
 pub struct Tile<'a> {
@@ -17,7 +25,7 @@ pub struct Tile<'a> {
 impl<'a> Tile<'a> {
     const WIDTH: usize = 8;
     const HEIGHT: usize = 8;
-    const BYTE_SIZE: usize = Tile::HEIGHT * 2;
+    pub const BYTE_SIZE: usize = Tile::HEIGHT * 2;
 
     pub fn new(data: &'a [u8]) -> Tile<'a> {
         Tile {
@@ -255,8 +263,6 @@ pub fn say_hello() -> String {
     return String::from("Hello, World!");
 }
 
-const SCREEN_WIDTH: usize = 160;
-const SCREEN_HEIGHT: usize = 144;
 const BYTES_PER_PIXEL: usize = 4;
 const SCREEN_BUFFER_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT * BYTES_PER_PIXEL;
 
@@ -345,10 +351,21 @@ impl Machine {
     }
 
     pub fn ppu_render_screen(&self) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
-        let tile = self.get_tile(0);
-        let pixel0 = tile.get_pixel(0, 0);
+        let mut screen = [u2::new(0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
-        let screen = [pixel0; SCREEN_WIDTH * SCREEN_HEIGHT];
+        for x in 0..SCREEN_WIDTH {
+            for y in 0..SCREEN_HEIGHT {
+                let tile_x = x / 8;
+                let tile_y = y / 8;
+                let tile_map_index = (tile_y * TILE_MAP_WIDTH) + tile_x;
+                let tile_index = self.memory[TILE_MAP_BASE + tile_map_index];
+                let tile = self.get_tile(tile_index as usize);
+                let pixel = tile.get_pixel(x % 8, y % 8);
+
+                screen[(y * SCREEN_WIDTH) + x] = pixel;
+            }
+        }
+
         screen
     }
 

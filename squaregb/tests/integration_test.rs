@@ -1,7 +1,8 @@
 use arbitrary_int::u2;
 use squaregb::Machine;
 use squaregb::R8::*;
-use squaregb::VIDEO_RAM_BASE;
+use squaregb::Tile;
+use squaregb::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_MAP_BASE, TILE_MAP_WIDTH, VIDEO_RAM_BASE};
 
 #[test]
 fn it_adds_two_integers() {
@@ -66,11 +67,11 @@ fn ppu_renders_black_background() {
 
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
 
-    let screen_data: [u2; 160 * 144] = machine.ppu_render_screen();
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let black = u2::new(0);
-    for x in 0..160 {
-        for y in 0..144 {
-            let pixel = screen_data[(144 * x) + y];
+    for x in 0..SCREEN_WIDTH {
+        for y in 0..SCREEN_HEIGHT {
+            let pixel = screen_data[(SCREEN_WIDTH * y) + x];
             assert_eq!(pixel, black);
         }
     }
@@ -84,12 +85,49 @@ fn ppu_renders_white_background() {
 
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
 
-    let screen_data: [u2; 160 * 144] = machine.ppu_render_screen();
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);
-    for x in 0..160 {
-        for y in 0..144 {
-            let pixel = screen_data[(144 * x) + y];
+    for x in 0..SCREEN_WIDTH {
+        for y in 0..SCREEN_HEIGHT {
+            let pixel = screen_data[(SCREEN_WIDTH * y) + x];
             assert_eq!(pixel, white);
+        }
+    }
+}
+
+#[test]
+fn ppu_renders_tiling_checkerbox() {
+    let mut machine = Machine::new();
+
+    let white_tile: [u8; 16] = [0xFF; 16];
+    let black_tile: [u8; 16] = [0x00; 16];
+
+    machine.set_memory(VIDEO_RAM_BASE, &white_tile as &[u8]);
+    machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &black_tile as &[u8]);
+
+    for x in 0..32 {
+        for y in 0..32 {
+            let tile_map_index: usize = (y * TILE_MAP_WIDTH) + x;
+            let tile_index: usize = x + y % 2;
+            let tile_index: u8 = tile_index.try_into().unwrap();
+            machine.set_memory(TILE_MAP_BASE + tile_map_index, &[tile_index]);
+        }
+    }
+
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
+    let white = u2::new(3);
+    let black = u2::new(0);
+    for x in 0..SCREEN_WIDTH {
+        for y in 0..SCREEN_HEIGHT {
+            let pixel = screen_data[(SCREEN_WIDTH * y) + x];
+
+            let expected_color = if (x / 8) + (y / 8) % 2 == 0 {
+                white
+            } else {
+                black
+            };
+
+            assert_eq!(pixel, expected_color, "At pixel ({x},{y})");
         }
     }
 }
