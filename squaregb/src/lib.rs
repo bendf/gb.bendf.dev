@@ -3,8 +3,43 @@ use Flag::{Carry, HalfCarryBCD, SubBCD, Zero};
 use R16::{AF, BC, DE, HL, SP};
 use arbitrary_int::{u1, u2, u3, u4, u5, u12};
 use js_sys;
+use std::sync::{LazyLock, Mutex};
 use wasm_bindgen::prelude::*;
 use web_sys;
+
+pub const VIDEO_RAM_BASE: usize = 0x8000;
+
+#[derive(Debug, PartialEq)]
+pub struct Tile<'a> {
+    data: &'a [u8; 16],
+}
+
+impl<'a> Tile<'a> {
+    const WIDTH: usize = 8;
+    const HEIGHT: usize = 8;
+    const BYTE_SIZE: usize = Tile::HEIGHT * 2;
+
+    pub fn new(data: &'a [u8]) -> Tile<'a> {
+        Tile {
+            data: data.try_into().unwrap(),
+        }
+    }
+
+    pub fn get_pixel(&self, x: usize, y: usize) -> u2 {
+        let low_bits = self.data[y * 2];
+        let high_bits = self.data[(y * 2) + 1];
+
+        // Bit 7 is leftmost bit (visually)
+        // Bit 0 is rightmost bit (visually)
+        // But we want x = 0 to indicate leftmost bit;
+        let bit_index = 7 - x;
+
+        let low_bit = u1::extract_u8(low_bits, bit_index).value();
+        let high_bit = u1::extract_u8(high_bits, bit_index).value();
+
+        return u2::new((high_bit << 1) + low_bit);
+    }
+}
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[repr(u8)]
@@ -198,6 +233,24 @@ fn main() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
+pub fn load_boot_rom() {
+    const BOOT_ROM: [u8; 1] = [0x00];
+    MACHINE.lock().unwrap().set_memory(0x0000, &BOOT_ROM);
+}
+
+// #[wasm_bindgen]
+// pub fn dump_state() -> String {
+//     let machine = MACHINE.lock().unwrap();
+// }
+
+#[wasm_bindgen]
+pub fn run() {
+    let mut machine = MACHINE.lock().unwrap();
+    machine.set_pc(0x0000);
+    machine.run_until_stopped();
+}
+
+#[wasm_bindgen]
 pub fn say_hello() -> String {
     return String::from("Hello, World!");
 }
@@ -208,6 +261,7 @@ const BYTES_PER_PIXEL: usize = 4;
 const SCREEN_BUFFER_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT * BYTES_PER_PIXEL;
 
 static mut SCREEN_BUFFER: [u8; SCREEN_BUFFER_SIZE] = [0; SCREEN_BUFFER_SIZE];
+static MACHINE: LazyLock<Mutex<Machine>> = LazyLock::new(|| Mutex::new(Machine::new()));
 
 #[wasm_bindgen]
 pub fn render_frame() {
@@ -235,6 +289,29 @@ pub fn get_screen_data() -> js_sys::Uint8ClampedArray {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct MachineState {
+    pc: u16,
+    A: u8,
+    F: u8,
+    B: u8,
+    C: u8,
+    D: u8,
+    E: u8,
+    H: u8,
+    L: u8,
+}
+
+impl std::fmt::Display for MachineState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "PC: {:#04x}\nA: {:#04x}\tF: {:#04x}\nB: {:#04x}\tC: {:#04x}\nD: {:#04x}\tE: {:#04x}\nH: {:#04x}\tL: {:#04x}",
+            self.pc, self.A, self.F, self.B, self.C, self.D, self.E, self.H, self.L,
+        )
+    }
+}
+
 pub struct Machine {
     pc: u16,
     gp_registers: [u8; 8],
@@ -255,6 +332,37 @@ impl Machine {
             ime: false,
             halted: false,
             stopped: false,
+        }
+    }
+
+    fn get_tile<'a>(&'a self, index: usize) -> Tile<'a> {
+        if index > 0x17F {
+            panic!("Tile index out of bounds! Must be in range 0..0x17F");
+        }
+        let tile_start = VIDEO_RAM_BASE + (index * Tile::BYTE_SIZE);
+        let tile_end = tile_start + Tile::BYTE_SIZE;
+        Tile::new(&self.memory[tile_start..tile_end])
+    }
+
+    pub fn ppu_render_screen(&self) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
+        let tile = self.get_tile(0);
+        let pixel0 = tile.get_pixel(0, 0);
+
+        let screen = [pixel0; SCREEN_WIDTH * SCREEN_HEIGHT];
+        screen
+    }
+
+    pub fn dump_state(&self) -> MachineState {
+        MachineState {
+            pc: self.get_pc(),
+            A: self.get_r8(A),
+            F: self.get_r8(F),
+            B: self.get_r8(B),
+            C: self.get_r8(C),
+            D: self.get_r8(D),
+            E: self.get_r8(E),
+            H: self.get_r8(H),
+            L: self.get_r8(L),
         }
     }
 
@@ -295,6 +403,12 @@ impl Machine {
             }
 
             steps_taken += 1;
+            self.step();
+        }
+    }
+
+    pub fn run_until_stopped(&mut self) {
+        while !self.stopped {
             self.step();
         }
     }
@@ -1834,7 +1948,12 @@ impl Machine {
                 self.inc_pc();
             }
 
-            _ => todo!("Missing instruction exec"),
+            Stop { ignore } => {
+                self.adv_pc(0x02);
+                self.stopped = true;
+            }
+
+            x => todo!("Attempt to execute missing instruction {x:?}"),
         }
     }
 }
@@ -6257,15 +6376,17 @@ mod exec_tests {
 
     #[rstest]
     fn it_execs_stop() {
-        todo!("TODO: exec stop");
-        // let mut machine = Machine::new();
-        // machine.set_ime();
-        //
-        // let ins = Instruction::Stop { ignore: 0 };
-        // machine.exec(ins);
-        //
-        // assert!(machine.is_stopped());
-        //
+        // TODO: Test stop's 'wait for button press' behaviour
+        // TODO: Test stop's use as a speed switcher.
+        // See: https://gbdev.io/pandocs/Reducing_Power_Consumption.html
+        let mut machine = Machine::new();
+        machine.set_ime();
+
+        let ins = Instruction::Stop { ignore: 0 };
+        machine.exec(ins);
+
+        assert!(machine.is_stopped());
+
         // machine.depress_button(Button::A);
         // machine.set_int_flag(InterruptFlag::Joypad);
         // // Pressing any button clears the STOP
@@ -6394,5 +6515,124 @@ mod int_tests {
     fn it_adds_i8_to_u16(#[case] a: u16, #[case] b: i8, #[case] result: u16) {
         let b: u16 = (b as i16).cast_unsigned();
         assert_eq!(result, a.wrapping_add(b));
+    }
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use super::*;
+
+    #[test]
+    fn it_emits_state_dump() {
+        let machine = Machine::new();
+
+        let dump = machine.dump_state();
+
+        assert_eq!(
+            dump,
+            MachineState {
+                pc: 0x00,
+                A: 0x00,
+                F: 0x00,
+                B: 0x00,
+                C: 0x00,
+                D: 0x00,
+                E: 0x00,
+                H: 0x00,
+                L: 0x00
+            }
+        );
+    }
+}
+
+#[cfg(test)]
+mod program_tests {
+
+    use super::*;
+
+    #[test]
+    fn it_runs_addition_program() {
+        let mut machine = Machine::new();
+
+        let rom: Vec<u8> = assemble("LD A, 0x01\nLD B, 0x01\nADD B\nSTOP");
+        machine.set_memory(0x0000, &rom[..]);
+
+        machine.run_until_stopped();
+
+        let state = machine.dump_state();
+        let expected_state = MachineState {
+            pc: 0x0007,
+            A: 0x02,
+            F: 0x00,
+            B: 0x01,
+            C: 0x00,
+            D: 0x00,
+            E: 0x00,
+            H: 0x00,
+            L: 0x00,
+        };
+        assert_eq!(state, expected_state);
+    }
+
+    pub fn assemble(_code: &str) -> Vec<u8> {
+        // TODO: Hardcoded. Implement a real assembler
+        // LD A, 0x00
+        // LD B, 0x01
+        // ADD B
+        // STOP
+        [0x3E, 0x01, 0x06, 0x01, 0x80, 0x10, 0x00].to_vec()
+    }
+}
+
+#[cfg(test)]
+mod ppu_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    pub fn it_loads_valid_tile_data(#[values(0, 1, 0xFF, 0x17F)] index: usize) {
+        let machine = Machine::new();
+        let tile = machine.get_tile(index);
+
+        let tile_start = VIDEO_RAM_BASE + (index * Tile::BYTE_SIZE);
+        let tile_data = &machine.memory[tile_start..tile_start + Tile::BYTE_SIZE];
+
+        assert_eq!(tile, Tile::new(tile_data));
+    }
+
+    #[rstest]
+    #[should_panic]
+    pub fn it_loads_invalid_tile_data(#[values(0x180, 0x1FF)] index: usize) {
+        let machine = Machine::new();
+        machine.get_tile(index);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case((0,0), u2::new(0))]
+    #[case((7,0), u2::new(0))]
+    #[case((0,1), u2::new(3))]
+    #[case((3,3), u2::new(3))]
+    #[case((3,4), u2::new(3))]
+    #[case((4,4), u2::new(0))]
+    #[case((3,5), u2::new(0))]
+    #[case((4,5), u2::new(3))]
+    #[case((0,7), u2::new(1))]
+    #[case((7,7), u2::new(2))]
+    pub fn it_extracts_tile_pixels(#[case] (x, y): (usize, usize), #[case] value: u2) {
+        let pixel_data: [u8; 16] = [
+            0b0000_0000, 0b0000_0000, 
+            0b1111_1111, 0b1111_1111, 
+            0b0000_0000, 0b0000_0000, 
+            0b1111_1111, 0b1111_1111, 
+            0b1111_0000, 0b1111_0000, 
+            0b0000_1111, 0b0000_1111, 
+            0b0000_0000, 0b0000_0000, 
+            0b1111_0000, 0b0000_1111
+        ];
+
+        let tile = Tile::new(&pixel_data);
+
+        assert_eq!(value, tile.get_pixel(x, y));
     }
 }

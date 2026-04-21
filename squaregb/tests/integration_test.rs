@@ -1,5 +1,7 @@
+use arbitrary_int::u2;
 use squaregb::Machine;
 use squaregb::R8::*;
+use squaregb::VIDEO_RAM_BASE;
 
 #[test]
 fn it_adds_two_integers() {
@@ -54,4 +56,40 @@ fn it_runs_boot_rom() {
 
     // Shouldn't panic
     machine.run_until_pc(0x1000, 100_000);
+}
+
+#[test]
+fn ppu_renders_black_background() {
+    let mut machine = Machine::new();
+
+    let tile_data: [u8; 16] = [0x00; 16];
+
+    machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
+
+    let screen_data: [u2; 160 * 144] = machine.ppu_render_screen();
+    let black = u2::new(0);
+    for x in 0..160 {
+        for y in 0..144 {
+            let pixel = screen_data[(144 * x) + y];
+            assert_eq!(pixel, black);
+        }
+    }
+}
+
+#[test]
+fn ppu_renders_white_background() {
+    let mut machine = Machine::new();
+
+    let tile_data: [u8; 16] = [0xFF; 16];
+
+    machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
+
+    let screen_data: [u2; 160 * 144] = machine.ppu_render_screen();
+    let white = u2::new(3);
+    for x in 0..160 {
+        for y in 0..144 {
+            let pixel = screen_data[(144 * x) + y];
+            assert_eq!(pixel, white);
+        }
+    }
 }

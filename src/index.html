@@ -51,7 +51,7 @@
 		</aside>
 
 		<script type="module">
-			import init, { say_hello, render_frame, get_screen_data } from './wasm/squaregb.js';
+			import init, { say_hello, render_frame, get_screen_data, load_boot_rom, run } from './wasm/squaregb.js';
 			
 			function render_screen() {
 				render_frame();
@@ -60,7 +60,6 @@
 				const ctx = canvas.getContext("2d");
 				const imageData = new ImageData(screenData, 160, 144, { colorSpace: "srgb", pixelFormat: "rgba-unorm8"});
 				ctx.putImageData(imageData,0,0);
-				
 			}
 			
 			async function setup() {
@@ -70,7 +69,8 @@
 					document.getElementById("wasm-console").innerText = say_hello();
 					});
 					
-					render_screen();
+					load_boot_rom();
+					run();
 					
 				}
 				
