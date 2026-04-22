@@ -9,13 +9,82 @@ use web_sys;
 
 pub const VIDEO_RAM_BASE: usize = 0x8000;
 pub const TILE_MAP_BASE: usize = 0x9800;
+pub const TILE_DATA_BASE: usize = VIDEO_RAM_BASE;
 
 pub const TILE_MAP_WIDTH: usize = 32;
 pub const TILE_MAP_HEIGHT: usize = 32;
-// pub const TILE_MAP_B_BASE: usize = 0x9C00;
 
 pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
+
+pub const TILE_DATA_SIZE: usize = 384;
+
+#[derive(Debug)]
+pub struct Tilemap<'a> {
+    data: &'a [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT],
+}
+
+impl<'a> Tilemap<'a> {
+    pub fn new(data: &[u8]) -> Tilemap {
+        Tilemap {
+            data: data.try_into().unwrap(),
+        }
+    }
+
+    fn get_tile_index(&self, x: usize, y: usize) -> usize {
+        y * TILE_MAP_WIDTH + x
+    }
+}
+
+#[cfg(test)]
+mod tilemap_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(0x00, u2::new(0))]
+    #[case(0xFF, u2::new(3))]
+    fn it_loads_tile_from_map(#[case] value: u8, #[case] pixel_color: u2) {
+        let map_data = [0xFF; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+        let tilemap = Tilemap::new(&map_data);
+        let tile_index = tilemap.get_tile_index(0, 0);
+        let tile_data = TileData::new(&[0xFF; 384]);
+        let tile: Tile = tile_data.get_tile(tile_index);
+        assert_eq!(tile.get_pixel(0, 0), u2::new(3));
+    }
+}
+
+struct TileData<'a> {
+    data: &'a [u8],
+}
+
+impl<'a> TileData<'a> {
+    pub fn new(data: &[u8]) -> TileData {
+        TileData { data: data }
+    }
+
+    pub fn get_tile(&self, index: usize) -> Tile {
+        let data = &self.data[index * Tile::BYTE_SIZE..(index + 1) * Tile::BYTE_SIZE];
+
+        Tile {
+            data: data.try_into().unwrap(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tiledata_tests {
+
+    use super::*;
+
+    #[test]
+    fn it_loads_tile_from_tile_data() {
+        let data = [0xFF; TILE_DATA_SIZE * Tile::BYTE_SIZE];
+        let tile_data = TileData::new(&data);
+        let tile = tile_data.get_tile(0);
+        assert_eq!(tile.get_pixel(0, 0), u2::new(3));
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct Tile<'a> {
@@ -353,13 +422,16 @@ impl Machine {
     pub fn ppu_render_screen(&self) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
         let mut screen = [u2::new(0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
+        let tilemap = Tilemap::new(&self.memory[TILE_MAP_BASE..]);
+        let tiledata = TileData::new(&self.memory[TILE_DATA_BASE..]);
+
         for x in 0..SCREEN_WIDTH {
             for y in 0..SCREEN_HEIGHT {
                 let tile_x = x / 8;
                 let tile_y = y / 8;
-                let tile_map_index = (tile_y * TILE_MAP_WIDTH) + tile_x;
-                let tile_index = self.memory[TILE_MAP_BASE + tile_map_index];
-                let tile = self.get_tile(tile_index as usize);
+
+                let tile_index = tilemap.get_tile_index(tile_x, tile_y);
+                let tile = tiledata.get_tile(tile_index);
                 let pixel = tile.get_pixel(x % 8, y % 8);
 
                 screen[(y * SCREEN_WIDTH) + x] = pixel;
@@ -6619,7 +6691,7 @@ mod ppu_tests {
 
     #[rstest]
     #[should_panic]
-    pub fn it_loads_invalid_tile_data(#[values(0x180, 0x1FF)] index: usize) {
+    pub fn it_fails_to_load_invalid_tile_data(#[values(0x180, 0x1FF)] index: usize) {
         let machine = Machine::new();
         machine.get_tile(index);
     }
