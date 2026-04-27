@@ -28,18 +28,18 @@ test("Emulator displays black screen on boot", async ({ page }) => {
 });
 
 // Emulator displays black in to-right-hand corner
-test.skip("Emulator test rom shows checkerboard", async ({ page }) => {
+test("Emulator test rom shows checkerboard", async ({ page }) => {
   await page.goto("/");
 
-  const black = [0x00, 0x00, 0x00, 0x01];
-  const white = [0xff, 0xff, 0xff, 0x01];
+  const black = [0x00, 0x00, 0x00, 0xff];
+  const white = [0xff, 0xff, 0xff, 0xff];
 
-  page.waitForTimeout(1000);
+  await page.waitForTimeout(1000);
 
   await page.getByText("Load Checkerboard ROM").click();
-  await page.getByTestId("button-run-emulator").click();
+  await page.getByText("Render screen").click();
 
-  page.waitForTimeout(1000);
+  await page.waitForTimeout(1000);
 
   const firstTileColor = await page.evaluate(() => {
     const screen = document.getElementById("squaregb-screen");
@@ -57,7 +57,7 @@ test.skip("Emulator test rom shows checkerboard", async ({ page }) => {
     }
   });
 
-  expect(firstTileColor).toBe(black);
+  expect(firstTileColor).toStrictEqual(black);
 
   const secondTileColor = await page.evaluate(() => {
     const screen = document.getElementById("squaregb-screen");
@@ -75,5 +75,5 @@ test.skip("Emulator test rom shows checkerboard", async ({ page }) => {
     }
   });
 
-  expect(secondTileColor).toBe(white);
+  expect(secondTileColor).toStrictEqual(white);
 });

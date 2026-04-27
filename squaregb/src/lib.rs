@@ -25,14 +25,16 @@ pub struct Tilemap<'a> {
 }
 
 impl<'a> Tilemap<'a> {
-    pub fn new(data: &[u8]) -> Tilemap {
+    pub fn new(data: &'a [u8]) -> Tilemap<'a> {
         Tilemap {
             data: data.try_into().unwrap(),
         }
     }
 
     fn get_tile_index(&self, x: usize, y: usize) -> usize {
-        y * TILE_MAP_WIDTH + x
+        let tile_map_index = (y * TILE_MAP_WIDTH) + x;
+        let tile_index = self.data[tile_map_index];
+        tile_index as usize
     }
 }
 
@@ -45,12 +47,13 @@ mod tilemap_tests {
     #[case(0x00, u2::new(0))]
     #[case(0xFF, u2::new(3))]
     fn it_loads_tile_from_map(#[case] value: u8, #[case] pixel_color: u2) {
-        let map_data = [0xFF; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+        let map_data = [0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
         let tilemap = Tilemap::new(&map_data);
         let tile_index = tilemap.get_tile_index(0, 0);
-        let tile_data = TileData::new(&[0xFF; 384]);
+        let data = [value; 384];
+        let tile_data = TileData::new(&data);
         let tile: Tile = tile_data.get_tile(tile_index);
-        assert_eq!(tile.get_pixel(0, 0), u2::new(3));
+        assert_eq!(tile.get_pixel(0, 0), pixel_color);
     }
 }
 
@@ -59,11 +62,12 @@ struct TileData<'a> {
 }
 
 impl<'a> TileData<'a> {
-    pub fn new(data: &[u8]) -> TileData {
+    pub fn new(data: &'a [u8]) -> TileData<'a> {
         TileData { data: data }
     }
 
-    pub fn get_tile(&self, index: usize) -> Tile {
+    pub fn get_tile(&self, index: usize) -> Tile<'a> {
+        assert!(index < 384, "Index {}", index);
         let data = &self.data[index * Tile::BYTE_SIZE..(index + 1) * Tile::BYTE_SIZE];
 
         Tile {
@@ -315,6 +319,27 @@ pub fn load_boot_rom() {
     MACHINE.lock().unwrap().set_memory(0x0000, &BOOT_ROM);
 }
 
+#[wasm_bindgen]
+pub fn load_checkerboard_rom() {
+    const BLACK_TILE: [u8; 16] = [0x00; 16];
+    const WHITE_TILE: [u8; 16] = [0xFF; 16];
+
+    let mut machine = MACHINE.lock().unwrap();
+    machine.set_memory(TILE_DATA_BASE, &BLACK_TILE);
+    machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &WHITE_TILE);
+
+    let mut tile_map: [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT] =
+        [0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+
+    for x in 0..TILE_MAP_WIDTH {
+        for y in 0..TILE_MAP_HEIGHT {
+            tile_map[(y * TILE_MAP_WIDTH) + x] = if (x + y) % 2 == 0 { 0 } else { 1 };
+        }
+    }
+
+    machine.set_memory(TILE_MAP_BASE, &tile_map);
+}
+
 // #[wasm_bindgen]
 // pub fn dump_state() -> String {
 //     let machine = MACHINE.lock().unwrap();
@@ -340,16 +365,48 @@ static MACHINE: LazyLock<Mutex<Machine>> = LazyLock::new(|| Mutex::new(Machine::
 
 #[wasm_bindgen]
 pub fn render_frame() {
-    for i in 0..SCREEN_WIDTH {
-        for j in 0..SCREEN_HEIGHT {
-            let base = ((j * SCREEN_WIDTH) + i) * BYTES_PER_PIXEL; //i j * BYTES_PER_PIXEL;
+    let machine = MACHINE.lock().unwrap();
+    let screen = machine.ppu_render_screen();
+
+    for x in 0..SCREEN_WIDTH {
+        for y in 0..SCREEN_HEIGHT {
+            let pixel_index = (y * SCREEN_WIDTH) + x;
+            let base = pixel_index * BYTES_PER_PIXEL;
+            const COLOR_WHITE: u8 = 0xFF;
+            const COLOR_BLACK: u8 = 0x00;
+            const COLOR_DARK: u8 = 0x60;
+            const COLOR_LIGHT: u8 = 0xB0;
 
             unsafe {
-                let pixel = &mut SCREEN_BUFFER[base..];
-                pixel[0] = 0x00;
-                pixel[1] = 0x00;
-                pixel[2] = 0x00;
-                pixel[3] = 0xFF;
+                let pixel = &mut SCREEN_BUFFER[base..base + 4];
+
+                match screen[pixel_index].value() {
+                    0 => {
+                        pixel[0] = COLOR_BLACK;
+                        pixel[1] = COLOR_BLACK;
+                        pixel[2] = COLOR_BLACK;
+                        pixel[3] = 0xFF;
+                    }
+                    1 => {
+                        pixel[0] = COLOR_DARK;
+                        pixel[1] = COLOR_DARK;
+                        pixel[2] = COLOR_DARK;
+                        pixel[3] = 0xFF;
+                    }
+                    2 => {
+                        pixel[0] = COLOR_LIGHT;
+                        pixel[1] = COLOR_LIGHT;
+                        pixel[2] = COLOR_LIGHT;
+                        pixel[3] = 0xFF;
+                    }
+                    3 => {
+                        pixel[0] = COLOR_WHITE;
+                        pixel[1] = COLOR_WHITE;
+                        pixel[2] = COLOR_WHITE;
+                        pixel[3] = 0xFF;
+                    }
+                    _ => {}
+                }
             }
         }
     }
@@ -422,8 +479,12 @@ impl Machine {
     pub fn ppu_render_screen(&self) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
         let mut screen = [u2::new(0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
-        let tilemap = Tilemap::new(&self.memory[TILE_MAP_BASE..]);
-        let tiledata = TileData::new(&self.memory[TILE_DATA_BASE..]);
+        let tilemap = Tilemap::new(
+            &self.memory[TILE_MAP_BASE..TILE_MAP_BASE + (TILE_MAP_WIDTH * TILE_MAP_HEIGHT)],
+        );
+        let tiledata = TileData::new(
+            &self.memory[TILE_DATA_BASE..TILE_DATA_BASE + (Tile::BYTE_SIZE * TILE_DATA_SIZE)],
+        );
 
         for x in 0..SCREEN_WIDTH {
             for y in 0..SCREEN_HEIGHT {

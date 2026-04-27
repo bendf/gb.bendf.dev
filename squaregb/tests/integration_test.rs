@@ -83,7 +83,10 @@ fn ppu_renders_white_background() {
 
     let tile_data: [u8; 16] = [0xFF; 16];
 
+    let tile_map_data = [0x00; 256];
+
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
+    machine.set_memory(TILE_MAP_BASE, &tile_map_data);
 
     let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);

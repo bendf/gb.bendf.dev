@@ -12,6 +12,7 @@
 		<div id="squaregb-wrapper">
 			<button id="load-checkerboard-rom">Load Checkerboard ROM</button>
 			<button data-testid="button-run-emulator">Run</button>
+			<button data-testid="button-render-screen" id="button-render-screen">Render screen</button>
 			<main id="squaregb-root">
 				<canvas id="squaregb-screen" width="160" height="144"></canvas>
 				<div id="squaregb-dpad">
@@ -49,32 +50,6 @@
 					</ul></li>
 			</ul>
 		</aside>
-
-		<script type="module">
-			import init, { say_hello, render_frame, get_screen_data, load_boot_rom, run } from './wasm/squaregb.js';
-			
-			function render_screen() {
-				render_frame();
-				const screenData = get_screen_data();
-				const canvas = document.getElementById("squaregb-screen");
-				const ctx = canvas.getContext("2d");
-				const imageData = new ImageData(screenData, 160, 144, { colorSpace: "srgb", pixelFormat: "rgba-unorm8"});
-				ctx.putImageData(imageData,0,0);
-			}
-			
-			async function setup() {
-				await init();
-				
-				document.getElementById("run-wasm-test").addEventListener("click",(e) => {
-					document.getElementById("wasm-console").innerText = say_hello();
-					});
-					
-					load_boot_rom();
-					run();
-					
-				}
-				
-				setup();
-		</script>
+		<script type="module" src="index.mjs"></script>
 	</body>
 </html>
