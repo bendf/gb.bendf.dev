@@ -27,7 +27,6 @@ test("Emulator displays black screen on boot", async ({ page }) => {
   expect(data).toEqual(expectedData);
 });
 
-// Emulator displays black in to-right-hand corner
 test("Emulator test rom shows checkerboard", async ({ page }) => {
   await page.goto("/");
 
@@ -76,4 +75,57 @@ test("Emulator test rom shows checkerboard", async ({ page }) => {
   });
 
   expect(secondTileColor).toStrictEqual(white);
+});
+
+test("Emulator test rom shows scrolling background", async ({ page }) => {
+  await page.goto("/");
+
+  const black = [0x00, 0x00, 0x00, 0xff];
+  const white = [0xff, 0xff, 0xff, 0xff];
+
+  await page.waitForTimeout(1000);
+
+  await page.getByText("Load Checkerboard ROM").click();
+  await page.getByText("Render screen").click();
+
+  await page.waitForTimeout(1000);
+
+  const firstTileColor = await page.evaluate(() => {
+    const screen = document.getElementById("squaregb-screen");
+
+    if (screen instanceof HTMLCanvasElement) {
+      const context = screen.getContext("2d")!;
+
+      const imgData = context.getImageData(0, 0, 1, 1);
+      return [
+        imgData.data[0],
+        imgData.data[1],
+        imgData.data[2],
+        imgData.data[3],
+      ];
+    }
+  });
+
+  await page.getByTestId("input-scx").fill("8");
+  await page.getByText("Render screen").click();
+
+  expect(firstTileColor).toStrictEqual(black);
+
+  const firstTileColorAfter = await page.evaluate(() => {
+    const screen = document.getElementById("squaregb-screen");
+
+    if (screen instanceof HTMLCanvasElement) {
+      const context = screen.getContext("2d")!;
+
+      const imgData = context.getImageData(0, 0, 1, 1);
+      return [
+        imgData.data[0],
+        imgData.data[1],
+        imgData.data[2],
+        imgData.data[3],
+      ];
+    }
+  });
+
+  expect(firstTileColorAfter).toStrictEqual(white);
 });

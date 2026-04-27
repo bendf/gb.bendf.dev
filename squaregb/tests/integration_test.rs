@@ -67,7 +67,7 @@ fn ppu_renders_black_background() {
 
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0);
     let black = u2::new(0);
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
@@ -88,7 +88,7 @@ fn ppu_renders_white_background() {
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
     machine.set_memory(TILE_MAP_BASE, &tile_map_data);
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0);
     let white = u2::new(3);
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
@@ -105,26 +105,63 @@ fn ppu_renders_tiling_checkerbox() {
     let white_tile: [u8; 16] = [0xFF; 16];
     let black_tile: [u8; 16] = [0x00; 16];
 
-    machine.set_memory(VIDEO_RAM_BASE, &white_tile as &[u8]);
-    machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &black_tile as &[u8]);
+    machine.set_memory(VIDEO_RAM_BASE, &black_tile as &[u8]);
+    machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
 
     for x in 0..32 {
         for y in 0..32 {
             let tile_map_index: usize = (y * TILE_MAP_WIDTH) + x;
-            let tile_index: usize = x + y % 2;
+            let tile_index: usize = (x + y) % 2;
             let tile_index: u8 = tile_index.try_into().unwrap();
             machine.set_memory(TILE_MAP_BASE + tile_map_index, &[tile_index]);
         }
     }
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0);
     let white = u2::new(3);
     let black = u2::new(0);
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
             let pixel = screen_data[(SCREEN_WIDTH * y) + x];
 
-            let expected_color = if (x / 8) + (y / 8) % 2 == 0 {
+            let expected_color = if ((x / 8) + (y / 8)) % 2 == 0 {
+                black
+            } else {
+                white
+            };
+
+            assert_eq!(pixel, expected_color, "At pixel ({x},{y})");
+        }
+    }
+}
+
+#[test]
+fn ppu_renders_tiling_checkerbox_offset() {
+    let mut machine = Machine::new();
+
+    let white_tile: [u8; 16] = [0xFF; 16];
+    let black_tile: [u8; 16] = [0x00; 16];
+
+    machine.set_memory(VIDEO_RAM_BASE, &black_tile as &[u8]);
+    machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
+
+    for x in 0..32 {
+        for y in 0..32 {
+            let tile_map_index: usize = (y * TILE_MAP_WIDTH) + x;
+            let tile_index: usize = (x + y) % 2;
+            let tile_index: u8 = tile_index.try_into().unwrap();
+            machine.set_memory(TILE_MAP_BASE + tile_map_index, &[tile_index]);
+        }
+    }
+
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(8);
+    let white = u2::new(3);
+    let black = u2::new(0);
+    for x in 0..SCREEN_WIDTH {
+        for y in 0..SCREEN_HEIGHT {
+            let pixel = screen_data[(SCREEN_WIDTH * y) + x];
+
+            let expected_color = if ((x / 8) + (y / 8)) % 2 == 0 {
                 white
             } else {
                 black

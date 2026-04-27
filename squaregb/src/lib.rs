@@ -364,9 +364,9 @@ static mut SCREEN_BUFFER: [u8; SCREEN_BUFFER_SIZE] = [0; SCREEN_BUFFER_SIZE];
 static MACHINE: LazyLock<Mutex<Machine>> = LazyLock::new(|| Mutex::new(Machine::new()));
 
 #[wasm_bindgen]
-pub fn render_frame() {
+pub fn render_frame(scx: u8) {
     let machine = MACHINE.lock().unwrap();
-    let screen = machine.ppu_render_screen();
+    let screen = machine.ppu_render_screen(scx);
 
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
@@ -476,7 +476,8 @@ impl Machine {
         Tile::new(&self.memory[tile_start..tile_end])
     }
 
-    pub fn ppu_render_screen(&self) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
+    // TODO: Read SCX from memory-mapped registers
+    pub fn ppu_render_screen(&self, scx: u8) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
         let mut screen = [u2::new(0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
         let tilemap = Tilemap::new(
@@ -486,16 +487,19 @@ impl Machine {
             &self.memory[TILE_DATA_BASE..TILE_DATA_BASE + (Tile::BYTE_SIZE * TILE_DATA_SIZE)],
         );
 
-        for x in 0..SCREEN_WIDTH {
-            for y in 0..SCREEN_HEIGHT {
-                let tile_x = x / 8;
-                let tile_y = y / 8;
+        for screen_x in 0..SCREEN_WIDTH {
+            for screen_y in 0..SCREEN_HEIGHT {
+                // Scrolling
+                let tilemap_x = (screen_x + (scx as usize)) % (TILE_MAP_WIDTH * Tile::WIDTH);
+                let tilemap_y = screen_y;
+                let tile_x = tilemap_x / 8;
+                let tile_y = tilemap_y / 8;
 
                 let tile_index = tilemap.get_tile_index(tile_x, tile_y);
                 let tile = tiledata.get_tile(tile_index);
-                let pixel = tile.get_pixel(x % 8, y % 8);
+                let pixel = tile.get_pixel(tilemap_x % 8, tilemap_y % 8);
 
-                screen[(y * SCREEN_WIDTH) + x] = pixel;
+                screen[(screen_y * SCREEN_WIDTH) + screen_x] = pixel;
             }
         }
 
