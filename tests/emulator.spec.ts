@@ -90,7 +90,7 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
 
   await page.waitForTimeout(1000);
 
-  const firstTileColor = await page.evaluate(() => {
+  let firstTileColor = await page.evaluate(() => {
     const screen = document.getElementById("squaregb-screen");
 
     if (screen instanceof HTMLCanvasElement) {
@@ -105,13 +105,34 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
       ];
     }
   });
+  expect(firstTileColor).toStrictEqual(black);
 
   await page.getByTestId("input-scx").fill("8");
   await page.getByText("Render screen").click();
 
-  expect(firstTileColor).toStrictEqual(black);
+  await page.waitForTimeout(1000);
+  firstTileColor = await page.evaluate(() => {
+    const screen = document.getElementById("squaregb-screen");
 
-  const firstTileColorAfter = await page.evaluate(() => {
+    if (screen instanceof HTMLCanvasElement) {
+      const context = screen.getContext("2d")!;
+
+      const imgData = context.getImageData(0, 0, 1, 1);
+      return [
+        imgData.data[0],
+        imgData.data[1],
+        imgData.data[2],
+        imgData.data[3],
+      ];
+    }
+  });
+  expect(firstTileColor).toStrictEqual(white);
+
+  await page.getByTestId("input-scy").fill("8");
+  await page.getByText("Render screen").click();
+
+  await page.waitForTimeout(1000);
+  firstTileColor = await page.evaluate(() => {
     const screen = document.getElementById("squaregb-screen");
 
     if (screen instanceof HTMLCanvasElement) {
@@ -127,5 +148,5 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
     }
   });
 
-  expect(firstTileColorAfter).toStrictEqual(white);
+  expect(firstTileColor).toStrictEqual(black);
 });
