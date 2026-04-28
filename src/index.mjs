@@ -4,6 +4,8 @@ import init, {
   get_screen_data,
   load_boot_rom,
   load_checkerboard_rom,
+  set_scx,
+  set_scy,
   run,
 } from "./wasm/squaregb.js";
 
@@ -11,7 +13,9 @@ function render_screen() {
   const scx = document.getElementById("scx").value;
   const scy = document.getElementById("scy").value;
 
-  render_frame(scx, scy);
+  set_scx(scx);
+  set_scy(scy);
+  render_frame();
   const screenData = get_screen_data();
   const canvas = document.getElementById("squaregb-screen");
   const ctx = canvas.getContext("2d");

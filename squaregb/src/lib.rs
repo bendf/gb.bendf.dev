@@ -314,6 +314,16 @@ fn main() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
+pub fn set_scx(scx: u8) {
+    MACHINE.lock().unwrap().set_scx(scx);
+}
+
+#[wasm_bindgen]
+pub fn set_scy(scy: u8) {
+    MACHINE.lock().unwrap().set_scy(scy);
+}
+
+#[wasm_bindgen]
 pub fn load_boot_rom() {
     const BOOT_ROM: [u8; 1] = [0x00];
     MACHINE.lock().unwrap().set_memory(0x0000, &BOOT_ROM);
@@ -364,8 +374,11 @@ static mut SCREEN_BUFFER: [u8; SCREEN_BUFFER_SIZE] = [0; SCREEN_BUFFER_SIZE];
 static MACHINE: LazyLock<Mutex<Machine>> = LazyLock::new(|| Mutex::new(Machine::new()));
 
 #[wasm_bindgen]
-pub fn render_frame(scx: u8, scy: u8) {
+pub fn render_frame() {
     let machine = MACHINE.lock().unwrap();
+
+    let scx = machine.get_scx();
+    let scy = machine.get_scy();
     let screen = machine.ppu_render_screen(scx, scy);
 
     for x in 0..SCREEN_WIDTH {
@@ -452,6 +465,8 @@ pub struct Machine {
     ime: bool,
     halted: bool,
     stopped: bool,
+    scx: u8,
+    scy: u8,
 }
 
 impl Machine {
@@ -464,7 +479,24 @@ impl Machine {
             ime: false,
             halted: false,
             stopped: false,
+            scx: 0,
+            scy: 0,
         }
+    }
+
+    pub fn get_scx(&self) -> u8 {
+        self.scx
+    }
+
+    pub fn get_scy(&self) -> u8 {
+        self.scy
+    }
+
+    pub fn set_scx(&mut self, scx: u8) {
+        self.scx = scx
+    }
+    pub fn set_scy(&mut self, scy: u8) {
+        self.scy = scy
     }
 
     fn get_tile<'a>(&'a self, index: usize) -> Tile<'a> {
