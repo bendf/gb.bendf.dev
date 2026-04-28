@@ -29,7 +29,6 @@ function getScreenPixel(
 test("Emulator displays black screen on boot", async ({ page }) => {
   await page.goto("/");
 
-  // TODO: Avoid using timeout. Give it a second to load
   await page.waitForTimeout(1000);
 
   const canvasData = await page.evaluate(() => {
@@ -59,8 +58,6 @@ test("Emulator test rom shows checkerboard", async ({ page }) => {
   const black = [0x00, 0x00, 0x00, 0xff];
   const white = [0xff, 0xff, 0xff, 0xff];
 
-  await page.waitForTimeout(1000);
-
   await page.getByText("Load Checkerboard ROM").click();
   await page.getByText("Render screen").click();
 
@@ -78,8 +75,6 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
 
   const black = [0x00, 0x00, 0x00, 0xff];
   const white = [0xff, 0xff, 0xff, 0xff];
-
-  await page.waitForTimeout(1000);
 
   await page.getByText("Load Checkerboard ROM").click();
   await page.getByText("Render screen").click();
@@ -103,4 +98,27 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
   firstTileColor = await getScreenPixel(page, 0, 0);
 
   expect(firstTileColor).toStrictEqual(black);
+});
+
+test("Emulator test rom shows white window on black background", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const black = [0x00, 0x00, 0x00, 0xff];
+  const white = [0xff, 0xff, 0xff, 0xff];
+
+  await page.getByText("Load Window ROM").click();
+  await page.getByText("Render screen").click();
+
+  await page.getByTestId("input-wx").fill("0");
+  await page.getByTestId("input-wy").fill("77");
+
+  await page.waitForTimeout(1000);
+
+  let topLeftColor = await getScreenPixel(page, 0, 0);
+  expect(topLeftColor).toStrictEqual(black);
+
+  let botRightColor = await getScreenPixel(page, 159, 143);
+  expect(botRightColor).toStrictEqual(white);
 });

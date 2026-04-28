@@ -8,8 +8,15 @@ use wasm_bindgen::prelude::*;
 use web_sys;
 
 pub const VIDEO_RAM_BASE: usize = 0x8000;
+
+// TODO: BACKGROUND_TILE_MAP depends on LCDC value
 pub const TILE_MAP_BASE: usize = 0x9800;
+
+// TODO: TILE_DATA for BG/Window depends on LCDC value
 pub const TILE_DATA_BASE: usize = VIDEO_RAM_BASE;
+
+// TODO:TILE MAP for window depends on LCDC value
+pub const WINDOW_TILE_MAP_BASE: usize = 0x9C00;
 
 pub const TILE_MAP_WIDTH: usize = 32;
 pub const TILE_MAP_HEIGHT: usize = 32;
@@ -322,6 +329,15 @@ pub fn set_scx(scx: u8) {
 pub fn set_scy(scy: u8) {
     MACHINE.lock().unwrap().set_scy(scy);
 }
+#[wasm_bindgen]
+pub fn set_wx(wx: u8) {
+    MACHINE.lock().unwrap().set_wx(wx);
+}
+
+#[wasm_bindgen]
+pub fn set_wy(wy: u8) {
+    MACHINE.lock().unwrap().set_wy(wy);
+}
 
 #[wasm_bindgen]
 pub fn load_boot_rom() {
@@ -348,6 +364,27 @@ pub fn load_checkerboard_rom() {
     }
 
     machine.set_memory(TILE_MAP_BASE, &tile_map);
+}
+
+#[wasm_bindgen]
+pub fn load_window_rom() {
+    const BLACK_TILE: [u8; 16] = [0x00; 16];
+    const WHITE_TILE: [u8; 16] = [0xFF; 16];
+
+    let mut machine = MACHINE.lock().unwrap();
+    machine.set_memory(TILE_DATA_BASE, &BLACK_TILE);
+    machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &WHITE_TILE);
+
+    let background_tile_map: [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT] =
+        [0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+    machine.set_memory(TILE_MAP_BASE, &background_tile_map);
+
+    let window_tile_map: [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT] =
+        [0x01; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+    machine.set_memory(WINDOW_TILE_MAP_BASE, &window_tile_map);
+
+    machine.set_wx(87);
+    machine.set_wy(77);
 }
 
 // #[wasm_bindgen]
@@ -377,9 +414,7 @@ static MACHINE: LazyLock<Mutex<Machine>> = LazyLock::new(|| Mutex::new(Machine::
 pub fn render_frame() {
     let machine = MACHINE.lock().unwrap();
 
-    let scx = machine.get_scx();
-    let scy = machine.get_scy();
-    let screen = machine.ppu_render_screen(scx, scy);
+    let screen = machine.ppu_render_screen();
 
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
@@ -467,6 +502,8 @@ pub struct Machine {
     stopped: bool,
     scx: u8,
     scy: u8,
+    wx: u8,
+    wy: u8,
 }
 
 impl Machine {
@@ -481,6 +518,8 @@ impl Machine {
             stopped: false,
             scx: 0,
             scy: 0,
+            wx: 0,
+            wy: 0,
         }
     }
 
@@ -499,6 +538,21 @@ impl Machine {
         self.scy = scy
     }
 
+    pub fn get_wx(&self) -> u8 {
+        self.wx
+    }
+
+    pub fn get_wy(&self) -> u8 {
+        self.wy
+    }
+
+    pub fn set_wx(&mut self, wx: u8) {
+        self.wx = wx
+    }
+    pub fn set_wy(&mut self, wy: u8) {
+        self.wy = wy
+    }
+
     fn get_tile<'a>(&'a self, index: usize) -> Tile<'a> {
         if index > 0x17F {
             panic!("Tile index out of bounds! Must be in range 0..0x17F");
@@ -509,11 +563,19 @@ impl Machine {
     }
 
     // TODO: Read SCX from memory-mapped registers
-    pub fn ppu_render_screen(&self, scx: u8, scy: u8) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
+    pub fn ppu_render_screen(&self) -> [u2; SCREEN_WIDTH * SCREEN_HEIGHT] {
+        let scx = self.get_scx();
+        let scy = self.get_scy();
+        let wx = self.get_wx();
+        let wy = self.get_wy();
         let mut screen = [u2::new(0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
         let tilemap = Tilemap::new(
             &self.memory[TILE_MAP_BASE..TILE_MAP_BASE + (TILE_MAP_WIDTH * TILE_MAP_HEIGHT)],
+        );
+        let window_tilemap = Tilemap::new(
+            &self.memory
+                [WINDOW_TILE_MAP_BASE..WINDOW_TILE_MAP_BASE + (TILE_MAP_WIDTH * TILE_MAP_HEIGHT)],
         );
         let tiledata = TileData::new(
             &self.memory[TILE_DATA_BASE..TILE_DATA_BASE + (Tile::BYTE_SIZE * TILE_DATA_SIZE)],
@@ -521,7 +583,7 @@ impl Machine {
 
         for screen_x in 0..SCREEN_WIDTH {
             for screen_y in 0..SCREEN_HEIGHT {
-                // Scrolling
+                // Scrolling background
                 let tilemap_x = (screen_x + (scx as usize)) % (TILE_MAP_WIDTH * Tile::WIDTH);
                 let tilemap_y = (screen_y + (scy as usize)) % (TILE_MAP_HEIGHT * Tile::HEIGHT);
                 let tile_x = tilemap_x / 8;
@@ -532,6 +594,29 @@ impl Machine {
                 let pixel = tile.get_pixel(tilemap_x % 8, tilemap_y % 8);
 
                 screen[(screen_y * SCREEN_WIDTH) + screen_x] = pixel;
+            }
+        }
+
+        for x in 0..(TILE_MAP_WIDTH * Tile::WIDTH) {
+            for y in 0..(TILE_MAP_HEIGHT * Tile::HEIGHT) {
+                // Positioned window
+
+                // This will be offscreen
+                if x + (wx as usize) < Tile::WIDTH - 1 {
+                    continue;
+                }
+                let screen_x = x + (wx as usize) - (Tile::WIDTH - 1);
+                let screen_y = y + (wy as usize);
+
+                if screen_x < SCREEN_WIDTH && screen_y < SCREEN_HEIGHT {
+                    let tile_x = x / 8;
+                    let tile_y = y / 8;
+
+                    let tile_index = window_tilemap.get_tile_index(tile_x, tile_y);
+                    let tile = tiledata.get_tile(tile_index);
+                    let pixel = tile.get_pixel(x % 8, y % 8);
+                    screen[(screen_y * SCREEN_WIDTH) + screen_x] = pixel;
+                }
             }
         }
 

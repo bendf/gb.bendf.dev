@@ -2,7 +2,12 @@ use arbitrary_int::u2;
 use squaregb::Machine;
 use squaregb::R8::*;
 use squaregb::Tile;
-use squaregb::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_MAP_BASE, TILE_MAP_WIDTH, VIDEO_RAM_BASE};
+use squaregb::{
+    SCREEN_HEIGHT, SCREEN_WIDTH, TILE_DATA_BASE, TILE_MAP_BASE, TILE_MAP_HEIGHT, TILE_MAP_WIDTH,
+    VIDEO_RAM_BASE, WINDOW_TILE_MAP_BASE,
+};
+
+use rstest::rstest;
 
 #[test]
 fn it_adds_two_integers() {
@@ -66,8 +71,10 @@ fn ppu_renders_black_background() {
     let tile_data: [u8; 16] = [0x00; 16];
 
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
+    machine.set_scx(0);
+    machine.set_scy(0);
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0, 0);
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let black = u2::new(0);
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
@@ -87,8 +94,10 @@ fn ppu_renders_white_background() {
 
     machine.set_memory(VIDEO_RAM_BASE, &tile_data as &[u8]);
     machine.set_memory(TILE_MAP_BASE, &tile_map_data);
+    machine.set_scx(0);
+    machine.set_scy(0);
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0, 0);
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);
     for x in 0..SCREEN_WIDTH {
         for y in 0..SCREEN_HEIGHT {
@@ -107,6 +116,8 @@ fn ppu_renders_tiling_checkerbox() {
 
     machine.set_memory(VIDEO_RAM_BASE, &black_tile as &[u8]);
     machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
+    machine.set_scx(0);
+    machine.set_scy(0);
 
     for x in 0..32 {
         for y in 0..32 {
@@ -117,7 +128,7 @@ fn ppu_renders_tiling_checkerbox() {
         }
     }
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0, 0);
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);
     let black = u2::new(0);
     for x in 0..SCREEN_WIDTH {
@@ -144,6 +155,8 @@ fn ppu_renders_tiling_checkerbox_offset_x() {
 
     machine.set_memory(VIDEO_RAM_BASE, &black_tile as &[u8]);
     machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
+    machine.set_scx(8);
+    machine.set_scy(0);
 
     for x in 0..32 {
         for y in 0..32 {
@@ -154,7 +167,7 @@ fn ppu_renders_tiling_checkerbox_offset_x() {
         }
     }
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(8, 0);
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);
     let black = u2::new(0);
     for x in 0..SCREEN_WIDTH {
@@ -181,6 +194,8 @@ fn ppu_renders_tiling_checkerbox_offset_y() {
 
     machine.set_memory(VIDEO_RAM_BASE, &black_tile as &[u8]);
     machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
+    machine.set_scx(0);
+    machine.set_scy(8);
 
     for x in 0..32 {
         for y in 0..32 {
@@ -191,7 +206,7 @@ fn ppu_renders_tiling_checkerbox_offset_y() {
         }
     }
 
-    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen(0, 8);
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);
     let black = u2::new(0);
     for x in 0..SCREEN_WIDTH {
@@ -199,6 +214,45 @@ fn ppu_renders_tiling_checkerbox_offset_y() {
             let pixel = screen_data[(SCREEN_WIDTH * y) + x];
 
             let expected_color = if ((x / 8) + (y / 8)) % 2 == 0 {
+                white
+            } else {
+                black
+            };
+
+            assert_eq!(pixel, expected_color, "At pixel ({x},{y})");
+        }
+    }
+}
+
+#[rstest]
+fn ppu_renders_window(
+    #[values(0, 7, 80, 87, 160, 167, 255)] wx: u8,
+    #[values(0, 77, 144, 255)] wy: u8,
+) {
+    let mut machine = Machine::new();
+    let white_tile: [u8; 16] = [0xFF; 16];
+    let black_tile: [u8; 16] = [0x00; 16];
+
+    machine.set_memory(TILE_DATA_BASE, &black_tile as &[u8]);
+    machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
+
+    machine.set_memory(TILE_MAP_BASE, &[0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT]);
+    machine.set_memory(
+        WINDOW_TILE_MAP_BASE,
+        &[0x01; TILE_MAP_WIDTH * TILE_MAP_HEIGHT],
+    );
+
+    machine.set_wx(wx);
+    machine.set_wy(wy);
+
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
+    let white = u2::new(3);
+    let black = u2::new(0);
+    for x in 0..SCREEN_WIDTH {
+        for y in 0..SCREEN_HEIGHT {
+            let pixel = screen_data[(SCREEN_WIDTH * y) + x];
+
+            let expected_color = if (x + 7 >= (wx as usize)) & (y >= (wy as usize)) {
                 white
             } else {
                 black

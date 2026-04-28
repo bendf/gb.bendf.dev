@@ -11,17 +11,36 @@
 
 		<div id="squaregb-wrapper">
 			<button id="load-checkerboard-rom">Load Checkerboard ROM</button>
+			<button id="load-window-rom">Load Window ROM</button>
 			<button data-testid="button-run-emulator">Run</button>
 			<button data-testid="button-render-screen" id="button-render-screen">Render screen</button>
 
-			<label>
-				SCX
-				<input data-testid="input-scx" id="scx" type="text">
-			</label>
-			<label>
-				SCY
-				<input data-testid="input-scy" id="scy" type="text">
-			</label>
+			<ul>
+				<li>
+					<label>
+						SCX
+						<input data-testid="input-scx" id="scx" type="text">
+					</label>
+				</li>
+				<li>
+					<label>
+						SCY
+						<input data-testid="input-scy" id="scy" type="text">
+					</label>
+				</li>
+				<li>
+					<label>
+						WX
+						<input data-testid="input-wx" id="wx" type="text">
+					</label>
+				</li>
+				<li>
+					<label>
+						WY
+						<input data-testid="input-wy" id="wy" type="text">
+					</label>
+				</li>
+			</ul>
 			<main id="squaregb-root">
 				<canvas id="squaregb-screen" width="160" height="144"></canvas>
 				<div id="squaregb-dpad">
