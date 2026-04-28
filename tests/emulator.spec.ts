@@ -1,4 +1,30 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
+
+function getScreenPixel(
+  page: Page,
+  x: number,
+  y: number,
+): Promise<[number, number, number, number]> {
+  return page.evaluate(
+    ({ x, y }) => {
+      const screen = document.getElementById("squaregb-screen");
+
+      if (screen instanceof HTMLCanvasElement) {
+        const context = screen.getContext("2d")!;
+
+        const imgData = context.getImageData(x, y, 1, 1);
+        return [
+          imgData.data[0],
+          imgData.data[1],
+          imgData.data[2],
+          imgData.data[3],
+        ];
+      }
+      throw new Error("Screen not found");
+    },
+    { x, y },
+  );
+}
 
 test("Emulator displays black screen on boot", async ({ page }) => {
   await page.goto("/");
@@ -40,40 +66,10 @@ test("Emulator test rom shows checkerboard", async ({ page }) => {
 
   await page.waitForTimeout(1000);
 
-  const firstTileColor = await page.evaluate(() => {
-    const screen = document.getElementById("squaregb-screen");
-
-    if (screen instanceof HTMLCanvasElement) {
-      const context = screen.getContext("2d")!;
-
-      const imgData = context.getImageData(0, 0, 1, 1);
-      return [
-        imgData.data[0],
-        imgData.data[1],
-        imgData.data[2],
-        imgData.data[3],
-      ];
-    }
-  });
-
+  const firstTileColor = await getScreenPixel(page, 0, 0);
   expect(firstTileColor).toStrictEqual(black);
 
-  const secondTileColor = await page.evaluate(() => {
-    const screen = document.getElementById("squaregb-screen");
-
-    if (screen instanceof HTMLCanvasElement) {
-      const context = screen.getContext("2d")!;
-
-      const imgData = context.getImageData(8, 0, 1, 1);
-      return [
-        imgData.data[0],
-        imgData.data[1],
-        imgData.data[2],
-        imgData.data[3],
-      ];
-    }
-  });
-
+  const secondTileColor = await getScreenPixel(page, 8, 0);
   expect(secondTileColor).toStrictEqual(white);
 });
 
@@ -90,63 +86,21 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
 
   await page.waitForTimeout(1000);
 
-  let firstTileColor = await page.evaluate(() => {
-    const screen = document.getElementById("squaregb-screen");
-
-    if (screen instanceof HTMLCanvasElement) {
-      const context = screen.getContext("2d")!;
-
-      const imgData = context.getImageData(0, 0, 1, 1);
-      return [
-        imgData.data[0],
-        imgData.data[1],
-        imgData.data[2],
-        imgData.data[3],
-      ];
-    }
-  });
+  let firstTileColor = await getScreenPixel(page, 0, 0);
   expect(firstTileColor).toStrictEqual(black);
 
   await page.getByTestId("input-scx").fill("8");
   await page.getByText("Render screen").click();
-
   await page.waitForTimeout(1000);
-  firstTileColor = await page.evaluate(() => {
-    const screen = document.getElementById("squaregb-screen");
 
-    if (screen instanceof HTMLCanvasElement) {
-      const context = screen.getContext("2d")!;
-
-      const imgData = context.getImageData(0, 0, 1, 1);
-      return [
-        imgData.data[0],
-        imgData.data[1],
-        imgData.data[2],
-        imgData.data[3],
-      ];
-    }
-  });
+  firstTileColor = await getScreenPixel(page, 0, 0);
   expect(firstTileColor).toStrictEqual(white);
 
   await page.getByTestId("input-scy").fill("8");
   await page.getByText("Render screen").click();
-
   await page.waitForTimeout(1000);
-  firstTileColor = await page.evaluate(() => {
-    const screen = document.getElementById("squaregb-screen");
 
-    if (screen instanceof HTMLCanvasElement) {
-      const context = screen.getContext("2d")!;
-
-      const imgData = context.getImageData(0, 0, 1, 1);
-      return [
-        imgData.data[0],
-        imgData.data[1],
-        imgData.data[2],
-        imgData.data[3],
-      ];
-    }
-  });
+  firstTileColor = await getScreenPixel(page, 0, 0);
 
   expect(firstTileColor).toStrictEqual(black);
 });
