@@ -18,9 +18,6 @@ pub const TILE_DATA_BASE: usize = VIDEO_RAM_BASE;
 // TODO:TILE MAP for window depends on LCDC value
 pub const WINDOW_TILE_MAP_BASE: usize = 0x9C00;
 
-pub const TILE_MAP_WIDTH: usize = 32;
-pub const TILE_MAP_HEIGHT: usize = 32;
-
 pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
 
@@ -30,10 +27,12 @@ pub const TILE_DATA_SIZE: usize = 384;
 
 #[derive(Debug)]
 pub struct Tilemap<'a> {
-    data: &'a [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT],
+    data: &'a [u8; Tilemap::WIDTH * Tilemap::HEIGHT],
 }
 
 impl<'a> Tilemap<'a> {
+    pub const WIDTH: usize = 32;
+    pub const HEIGHT: usize = 32;
     pub fn new(data: &'a [u8]) -> Tilemap<'a> {
         Tilemap {
             data: data.try_into().unwrap(),
@@ -41,7 +40,7 @@ impl<'a> Tilemap<'a> {
     }
 
     fn get_tile_index(&self, x: usize, y: usize) -> usize {
-        let tile_map_index = (y * TILE_MAP_WIDTH) + x;
+        let tile_map_index = (y * Tilemap::WIDTH) + x;
         let tile_index = self.data[tile_map_index];
         tile_index as usize
     }
@@ -56,7 +55,7 @@ mod tilemap_tests {
     #[case(0x00, u2::new(0))]
     #[case(0xFF, u2::new(3))]
     fn it_loads_tile_from_map(#[case] value: u8, #[case] pixel_color: u2) {
-        let map_data = [0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+        let map_data = [0x00; Tilemap::WIDTH * Tilemap::HEIGHT];
         let tilemap = Tilemap::new(&map_data);
         let tile_index = tilemap.get_tile_index(0, 0);
         let data = [value; 384];
@@ -73,7 +72,6 @@ struct TileData<'a> {
 impl<'a> TileData<'a> {
 
     pub fn adopt(data: &[u8]) -> TileData<'a> {
-
         if data.len() % size_of::<Tile>() != 0 {
             panic!("Attempt to transmute invalid slice to slice of tiles");
         }
@@ -452,12 +450,12 @@ pub fn load_checkerboard_rom() {
     machine.set_memory(TILE_DATA_BASE, &BLACK_TILE);
     machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &WHITE_TILE);
 
-    let mut tile_map: [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT] =
-        [0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+    let mut tile_map: [u8; Tilemap::WIDTH * Tilemap::HEIGHT] =
+        [0x00; Tilemap::WIDTH * Tilemap::HEIGHT];
 
-    for x in 0..TILE_MAP_WIDTH {
-        for y in 0..TILE_MAP_HEIGHT {
-            tile_map[(y * TILE_MAP_WIDTH) + x] = if (x + y) % 2 == 0 { 0 } else { 1 };
+    for x in 0..Tilemap::WIDTH {
+        for y in 0..Tilemap::HEIGHT {
+            tile_map[(y * Tilemap::WIDTH) + x] = if (x + y) % 2 == 0 { 0 } else { 1 };
         }
     }
 
@@ -473,12 +471,12 @@ pub fn load_window_rom() {
     machine.set_memory(TILE_DATA_BASE, &BLACK_TILE);
     machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &WHITE_TILE);
 
-    let background_tile_map: [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT] =
-        [0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+    let background_tile_map: [u8; Tilemap::WIDTH * Tilemap::HEIGHT] =
+        [0x00; Tilemap::WIDTH * Tilemap::HEIGHT];
     machine.set_memory(TILE_MAP_BASE, &background_tile_map);
 
-    let window_tile_map: [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT] =
-        [0x01; TILE_MAP_WIDTH * TILE_MAP_HEIGHT];
+    let window_tile_map: [u8; Tilemap::WIDTH * Tilemap::HEIGHT] =
+        [0x01; Tilemap::WIDTH * Tilemap::HEIGHT];
     machine.set_memory(WINDOW_TILE_MAP_BASE, &window_tile_map);
 
     machine.set_wx(87);
@@ -673,11 +671,11 @@ impl Machine {
         let mut screen = [u2::new(0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
         let tilemap = Tilemap::new(
-            &self.memory[TILE_MAP_BASE..TILE_MAP_BASE + (TILE_MAP_WIDTH * TILE_MAP_HEIGHT)],
+            &self.memory[TILE_MAP_BASE..TILE_MAP_BASE + (Tilemap::WIDTH * Tilemap::HEIGHT)],
         );
         let window_tilemap = Tilemap::new(
             &self.memory
-                [WINDOW_TILE_MAP_BASE..WINDOW_TILE_MAP_BASE + (TILE_MAP_WIDTH * TILE_MAP_HEIGHT)],
+                [WINDOW_TILE_MAP_BASE..WINDOW_TILE_MAP_BASE + (Tilemap::WIDTH * Tilemap::HEIGHT)],
         );
         let tiledata = TileData::adopt(
             &self.memory[TILE_DATA_BASE..TILE_DATA_BASE + (size_of::<Tile>() * TILE_DATA_SIZE)],
@@ -686,8 +684,8 @@ impl Machine {
         for screen_x in 0..SCREEN_WIDTH {
             for screen_y in 0..SCREEN_HEIGHT {
                 // Scrolling background
-                let tilemap_x = (screen_x + (scx as usize)) % (TILE_MAP_WIDTH * Tile::WIDTH);
-                let tilemap_y = (screen_y + (scy as usize)) % (TILE_MAP_HEIGHT * Tile::HEIGHT);
+                let tilemap_x = (screen_x + (scx as usize)) % (Tilemap::WIDTH * Tile::WIDTH);
+                let tilemap_y = (screen_y + (scy as usize)) % (Tilemap::HEIGHT * Tile::HEIGHT);
                 let tile_x = tilemap_x / 8;
                 let tile_y = tilemap_y / 8;
 
@@ -700,8 +698,8 @@ impl Machine {
         }
 
         if self.lcdc.get_window_enable() {
-            for x in 0..(TILE_MAP_WIDTH * Tile::WIDTH) {
-                for y in 0..(TILE_MAP_HEIGHT * Tile::HEIGHT) {
+            for x in 0..(Tilemap::WIDTH * Tile::WIDTH) {
+                for y in 0..(Tilemap::HEIGHT * Tile::HEIGHT) {
                     // Positioned window
 
                     // This will be offscreen

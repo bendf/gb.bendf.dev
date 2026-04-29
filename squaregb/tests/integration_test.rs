@@ -1,11 +1,11 @@
 use arbitrary_int::u2;
 use squaregb::Machine;
 use squaregb::R8::*;
-use squaregb::Tile;
 use squaregb::{
-    SCREEN_HEIGHT, SCREEN_WIDTH, TILE_DATA_BASE, TILE_MAP_BASE, TILE_MAP_HEIGHT, TILE_MAP_WIDTH,
-    VIDEO_RAM_BASE, WINDOW_TILE_MAP_BASE,
+    SCREEN_HEIGHT, SCREEN_WIDTH, TILE_DATA_BASE, TILE_MAP_BASE, VIDEO_RAM_BASE,
+    WINDOW_TILE_MAP_BASE,
 };
+use squaregb::{Tile, Tilemap};
 
 use rstest::rstest;
 
@@ -122,7 +122,7 @@ fn ppu_renders_tiling_checkerbox() {
 
     for x in 0..32 {
         for y in 0..32 {
-            let tile_map_index: usize = (y * TILE_MAP_WIDTH) + x;
+            let tile_map_index: usize = (y * Tilemap::WIDTH) + x;
             let tile_index: usize = (x + y) % 2;
             let tile_index: u8 = tile_index.try_into().unwrap();
             machine.set_memory(TILE_MAP_BASE + tile_map_index, &[tile_index]);
@@ -162,7 +162,7 @@ fn ppu_renders_tiling_checkerbox_offset_x() {
 
     for x in 0..32 {
         for y in 0..32 {
-            let tile_map_index: usize = (y * TILE_MAP_WIDTH) + x;
+            let tile_map_index: usize = (y * Tilemap::WIDTH) + x;
             let tile_index: usize = (x + y) % 2;
             let tile_index: u8 = tile_index.try_into().unwrap();
             machine.set_memory(TILE_MAP_BASE + tile_map_index, &[tile_index]);
@@ -202,7 +202,7 @@ fn ppu_renders_tiling_checkerbox_offset_y() {
 
     for x in 0..32 {
         for y in 0..32 {
-            let tile_map_index: usize = (y * TILE_MAP_WIDTH) + x;
+            let tile_map_index: usize = (y * Tilemap::WIDTH) + x;
             let tile_index: usize = (x + y) % 2;
             let tile_index: u8 = tile_index.try_into().unwrap();
             machine.set_memory(TILE_MAP_BASE + tile_map_index, &[tile_index]);
@@ -239,10 +239,10 @@ fn ppu_renders_window(
     machine.set_memory(TILE_DATA_BASE, &black_tile as &[u8]);
     machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
 
-    machine.set_memory(TILE_MAP_BASE, &[0x00; TILE_MAP_WIDTH * TILE_MAP_HEIGHT]);
+    machine.set_memory(TILE_MAP_BASE, &[0x00; Tilemap::WIDTH * Tilemap::HEIGHT]);
     machine.set_memory(
         WINDOW_TILE_MAP_BASE,
-        &[0x01; TILE_MAP_WIDTH * TILE_MAP_HEIGHT],
+        &[0x01; Tilemap::WIDTH * Tilemap::HEIGHT],
     );
 
     machine.set_wx(wx);
