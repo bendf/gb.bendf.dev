@@ -26,6 +26,8 @@ pub const SCREEN_HEIGHT: usize = 144;
 
 pub const TILE_DATA_SIZE: usize = 384;
 
+
+
 #[derive(Debug)]
 pub struct Tilemap<'a> {
     data: &'a [u8; TILE_MAP_WIDTH * TILE_MAP_HEIGHT],
@@ -58,28 +60,34 @@ mod tilemap_tests {
         let tilemap = Tilemap::new(&map_data);
         let tile_index = tilemap.get_tile_index(0, 0);
         let data = [value; 384];
-        let tile_data = TileData::new(&data);
-        let tile: Tile = tile_data.get_tile(tile_index);
+        let tile_data = TileData::adopt(&data);
+        let tile = tile_data.get_tile(tile_index);
         assert_eq!(tile.get_pixel(0, 0), pixel_color);
     }
 }
 
 struct TileData<'a> {
-    data: &'a [u8],
+    data: &'a [Tile],
 }
 
 impl<'a> TileData<'a> {
-    pub fn new(data: &'a [u8]) -> TileData<'a> {
-        TileData { data: data }
+
+    pub fn adopt(data: &[u8]) -> TileData<'a> {
+
+        if data.len() % size_of::<Tile>() != 0 {
+            panic!("Attempt to transmute invalid slice to slice of tiles");
+        }
+
+        unsafe {
+            TileData { data: std::mem::transmute(data) }
+        }
+    }
+    pub fn new(data: &'a [Tile]) -> TileData<'a> {
+        TileData { data }
     }
 
-    pub fn get_tile(&self, index: usize) -> Tile<'a> {
-        assert!(index < 384, "Index {}", index);
-        let data = &self.data[index * Tile::BYTE_SIZE..(index + 1) * Tile::BYTE_SIZE];
-
-        Tile {
-            data: data.try_into().unwrap(),
-        }
+    pub fn get_tile(&self, index: usize) -> &Tile {
+        return &self.data[index];
     }
 }
 
@@ -90,26 +98,50 @@ mod tiledata_tests {
 
     #[test]
     fn it_loads_tile_from_tile_data() {
-        let data = [0xFF; TILE_DATA_SIZE * Tile::BYTE_SIZE];
+        let data = [Tile::new([0xFF; 16]); TILE_DATA_SIZE];
         let tile_data = TileData::new(&data);
         let tile = tile_data.get_tile(0);
         assert_eq!(tile.get_pixel(0, 0), u2::new(3));
     }
+
+    #[test]
+    fn it_adopts_tile_data() {
+        let data : [u8; 32] = [0xFF; 32];
+        let tile_data = TileData::adopt(&data);
+
+        assert_eq!(*tile_data.get_tile(0), Tile::new([0xFF; 16]));
+
+    }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Tile<'a> {
-    data: &'a [u8; 16],
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(transparent)]
+pub struct Tile {
+    data: [u8; 16],
 }
 
-impl<'a> Tile<'a> {
+impl Tile {
     const WIDTH: usize = 8;
     const HEIGHT: usize = 8;
     pub const BYTE_SIZE: usize = Tile::HEIGHT * 2;
 
-    pub fn new(data: &'a [u8]) -> Tile<'a> {
+    /// Reinterpet a patch of memory as a Tile.
+    pub fn adopt(data: &[u8]) -> &Tile {
+
+
+        if data.len() <  16 {
+            panic!("Attempt to transmute less than 16 bytes into a tile");
+        }
+
+        unsafe {
+            let x: &[u8; 16] = data.try_into().unwrap();
+            std::mem::transmute(x)
+        }
+    }
+
+    pub fn new(data: [u8; 16]) -> Tile {
         Tile {
-            data: data.try_into().unwrap(),
+            data,
         }
     }
 
@@ -621,13 +653,15 @@ impl Machine {
         self.wy = wy
     }
 
-    fn get_tile<'a>(&'a self, index: usize) -> Tile<'a> {
+    pub fn get_tile(&self, index: usize) -> &Tile {
         if index > 0x17F {
             panic!("Tile index out of bounds! Must be in range 0..0x17F");
         }
-        let tile_start = VIDEO_RAM_BASE + (index * Tile::BYTE_SIZE);
-        let tile_end = tile_start + Tile::BYTE_SIZE;
-        Tile::new(&self.memory[tile_start..tile_end])
+        let tile_start = TILE_DATA_BASE + (index * size_of::<Tile>());
+        let tile_end = tile_start + size_of::<Tile>(); 
+
+        Tile::adopt(&self.memory[tile_start..tile_end])
+
     }
 
     // TODO: Read SCX from memory-mapped registers
@@ -645,8 +679,8 @@ impl Machine {
             &self.memory
                 [WINDOW_TILE_MAP_BASE..WINDOW_TILE_MAP_BASE + (TILE_MAP_WIDTH * TILE_MAP_HEIGHT)],
         );
-        let tiledata = TileData::new(
-            &self.memory[TILE_DATA_BASE..TILE_DATA_BASE + (Tile::BYTE_SIZE * TILE_DATA_SIZE)],
+        let tiledata = TileData::adopt(
+            &self.memory[TILE_DATA_BASE..TILE_DATA_BASE + (size_of::<Tile>() * TILE_DATA_SIZE)],
         );
 
         for screen_x in 0..SCREEN_WIDTH {
@@ -6934,7 +6968,7 @@ mod ppu_tests {
         let tile_start = VIDEO_RAM_BASE + (index * Tile::BYTE_SIZE);
         let tile_data = &machine.memory[tile_start..tile_start + Tile::BYTE_SIZE];
 
-        assert_eq!(tile, Tile::new(tile_data));
+        assert_eq!(*tile, Tile::new(tile_data.try_into().unwrap()));
     }
 
     #[rstest]
@@ -6968,7 +7002,7 @@ mod ppu_tests {
             0b1111_0000, 0b0000_1111
         ];
 
-        let tile = Tile::new(&pixel_data);
+        let tile = Tile::new(pixel_data);
 
         assert_eq!(value, tile.get_pixel(x, y));
     }
