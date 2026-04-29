@@ -284,28 +284,28 @@ impl Into<u8> for Cond {
 
 use Cond::*;
 
-/// TODO: This could be a u8 with bit flags
-struct ButtonState {
-    a: bool,
-    b: bool,
-    select: bool,
-    start: bool,
-    up: bool,
-    down: bool,
-    left: bool,
-    right: bool,
-}
-
-enum Button {
-    A,
-    B,
-    SELECT,
-    START,
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT,
-}
+// /// TODO: This could be a u8 with bit flags
+// struct ButtonState {
+//     a: bool,
+//     b: bool,
+//     select: bool,
+//     start: bool,
+//     up: bool,
+//     down: bool,
+//     left: bool,
+//     right: bool,
+// }
+//
+// enum Button {
+//     A,
+//     B,
+//     SELECT,
+//     START,
+//     UP,
+//     DOWN,
+//     LEFT,
+//     RIGHT,
+// }
 
 
 #[derive(Clone, Copy, Debug)]
@@ -314,14 +314,14 @@ pub struct LCDC {
 }
 
 impl LCDC {
-    const LCD_ENABLED: u8 = 0b1000_0000;
-    const WINDOW_TILE_MAP_AREA: u8 = 0b0100_0000;
+    // const LCD_ENABLED: u8 = 0b1000_0000;
+    // const WINDOW_TILE_MAP_AREA: u8 = 0b0100_0000;
     const WINDOW_ENABLE: u8 = 0b0010_0000;
-    const BG_WINDOW_TILE_DATA_AREA: u8 = 0b0001_0000;
-    const BG_TILE_MAP: u8 = 0b0000_1000;
-    const OBJ_SIZE: u8 = 0b0000_0100;
-    const OBJ_ENABLE: u8 = 0b0000_0010;
-    const BG_AND_WINDOW_ENABLE: u8 = 0b0000_0001;
+    // const BG_WINDOW_TILE_DATA_AREA: u8 = 0b0001_0000;
+    // const BG_TILE_MAP: u8 = 0b0000_1000;
+    // const OBJ_SIZE: u8 = 0b0000_0100;
+    // const OBJ_ENABLE: u8 = 0b0000_0010;
+    // const BG_AND_WINDOW_ENABLE: u8 = 0b0000_0001;
 
 
     pub fn assign_bits(value: u8, mask: u8, to: bool) -> u8 {
@@ -538,22 +538,22 @@ pub fn get_screen_data() -> js_sys::Uint8ClampedArray {
 #[derive(Debug, PartialEq, Eq)]
 pub struct MachineState {
     pc: u16,
-    A: u8,
-    F: u8,
-    B: u8,
-    C: u8,
-    D: u8,
-    E: u8,
-    H: u8,
-    L: u8,
+    a: u8,
+    f: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    h: u8,
+    l: u8,
 }
 
 impl std::fmt::Display for MachineState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
-            f,
+            formatter,
             "PC: {:#04x}\nA: {:#04x}\tF: {:#04x}\nB: {:#04x}\tC: {:#04x}\nD: {:#04x}\tE: {:#04x}\nH: {:#04x}\tL: {:#04x}",
-            self.pc, self.A, self.F, self.B, self.C, self.D, self.E, self.H, self.L,
+            self.pc, self.a, self.f, self.b, self.c, self.d, self.e, self.h, self.l,
         )
     }
 }
@@ -696,14 +696,14 @@ impl Machine {
     pub fn dump_state(&self) -> MachineState {
         MachineState {
             pc: self.get_pc(),
-            A: self.get_r8(A),
-            F: self.get_r8(F),
-            B: self.get_r8(B),
-            C: self.get_r8(C),
-            D: self.get_r8(D),
-            E: self.get_r8(E),
-            H: self.get_r8(H),
-            L: self.get_r8(L),
+            a: self.get_r8(A),
+            f: self.get_r8(F),
+            b: self.get_r8(B),
+            c: self.get_r8(C),
+            d: self.get_r8(D),
+            e: self.get_r8(E),
+            h: self.get_r8(H),
+            l: self.get_r8(L),
         }
     }
 
@@ -723,8 +723,8 @@ impl Machine {
             Ok(ins) => {
                 self.exec(ins);
             }
-            Err(e) => {
-                panic!("Failed to decode instruction {e:?}")
+            Err(err) => {
+                panic!("Failed to decode instruction {err:?}")
             }
         }
     }
@@ -2012,7 +2012,7 @@ impl Machine {
 
             SRL { src } => {
                 let from = self.get_r8(src);
-                let res = (from >> 1);
+                let res = from >> 1;
                 let carry = (from & 0x01) == 0x01;
 
                 self.adv_pc(2);
@@ -2028,7 +2028,7 @@ impl Machine {
             SRLIndirectHL => {
                 let addr = self.get_r16(HL);
                 let from = self.get_mem8(addr);
-                let res = (from >> 1);
+                let res = from >> 1;
                 let carry = (from & 0x01) == 0x01;
 
                 self.adv_pc(2);
@@ -2110,7 +2110,7 @@ impl Machine {
                 let addr = self.get_r16(HL);
                 let from = self.get_mem8(addr);
 
-                let mask: u8 = (0x01 << bit);
+                let mask: u8 = 0x01 << bit;
 
                 let res = from | mask;
 
@@ -2289,12 +2289,11 @@ impl Machine {
                 self.inc_pc();
             }
 
-            Stop { ignore } => {
+            Stop { ignore: _ } => {
                 self.adv_pc(0x02);
                 self.stopped = true;
             }
 
-            x => todo!("Attempt to execute missing instruction {x:?}"),
         }
     }
 }
@@ -4889,16 +4888,15 @@ mod exec_tests {
 
     // CMP R8, A
     #[rstest]
-    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
-    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
-    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
-    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
-    #[case(0x10, 0x01, 0x0F, (false, true, true, false))]
+    #[case(0x00, 0x00,  (true, true, false, false))]
+    #[case(0x00, 0x01,  (false, true, true, true))]
+    #[case(0x01, 0x01,  (true, true, false, false))]
+    #[case(0xFF, 0xFF,  (true, true, false, false))]
+    #[case(0x10, 0x01,  (false, true, true, false))]
     fn it_execs_cp_8(
         #[values(B, C, D, E, H, L)] src: R8,
         #[case] x: u8,
         #[case] y: u8,
-        #[case] res: u8,
         #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
     ) {
         let mut machine = Machine::new();
@@ -4944,14 +4942,13 @@ mod exec_tests {
     }
 
     #[rstest]
-    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
-    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
-    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
-    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, (false, true, true, true))]
+    #[case(0x01, 0x01, (true, true, false, false))]
+    #[case(0xFF, 0xFF, (true, true, false, false))]
     fn it_execs_cmp8_indirect_hl(
         #[case] x: u8,
         #[case] y: u8,
-        #[case] res: u8,
         #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
     ) {
         let mut machine = Machine::new();
@@ -4975,15 +4972,14 @@ mod exec_tests {
     }
 
     #[rstest]
-    #[case(0x00, 0x00, 0x00, (true, true, false, false))]
-    #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
-    #[case(0x01, 0x01, 0x00, (true, true, false, false))]
-    #[case(0xFF, 0xFF, 0x00, (true, true, false, false))]
-    #[case(0x10, 0x01, 0x0F, (false, true, true, false))]
+    #[case(0x00, 0x00, (true, true, false, false))]
+    #[case(0x00, 0x01, (false, true, true, true))]
+    #[case(0x01, 0x01, (true, true, false, false))]
+    #[case(0xFF, 0xFF, (true, true, false, false))]
+    #[case(0x10, 0x01, (false, true, true, false))]
     fn it_execs_cmp_imm8(
         #[case] x: u8,
         #[case] y: u8,
-        #[case] sum: u8,
         #[case] (zero, sub_bcd, half_carry, carry): (bool, bool, bool, bool),
     ) {
         let mut machine = Machine::new();
@@ -6873,14 +6869,14 @@ mod debug_tests {
             dump,
             MachineState {
                 pc: 0x00,
-                A: 0x00,
-                F: 0x00,
-                B: 0x00,
-                C: 0x00,
-                D: 0x00,
-                E: 0x00,
-                H: 0x00,
-                L: 0x00
+                a: 0x00,
+                f: 0x00,
+                b: 0x00,
+                c: 0x00,
+                d: 0x00,
+                e: 0x00,
+                h: 0x00,
+                l: 0x00
             }
         );
     }
@@ -6903,14 +6899,14 @@ mod program_tests {
         let state = machine.dump_state();
         let expected_state = MachineState {
             pc: 0x0007,
-            A: 0x02,
-            F: 0x00,
-            B: 0x01,
-            C: 0x00,
-            D: 0x00,
-            E: 0x00,
-            H: 0x00,
-            L: 0x00,
+            a: 0x02,
+            f: 0x00,
+            b: 0x01,
+            c: 0x00,
+            d: 0x00,
+            e: 0x00,
+            h: 0x00,
+            l: 0x00,
         };
         assert_eq!(state, expected_state);
     }
