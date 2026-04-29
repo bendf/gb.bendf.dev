@@ -9,6 +9,7 @@ import init, {
   set_scy,
   set_wx,
   set_wy,
+  set_lcdc5,
   run,
 } from "./wasm/squaregb.js";
 
@@ -18,6 +19,10 @@ function render_screen() {
 
   const wx = document.getElementById("wx").value;
   const wy = document.getElementById("wy").value;
+
+  const lcdc5 = document.getElementById("lcdc.5").checked;
+
+  set_lcdc5(lcdc5);
 
   set_scx(scx);
   set_scy(scy);

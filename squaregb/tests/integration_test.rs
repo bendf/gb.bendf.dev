@@ -118,6 +118,7 @@ fn ppu_renders_tiling_checkerbox() {
     machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
     machine.set_scx(0);
     machine.set_scy(0);
+    machine.lcdc.set_window_enable(false);
 
     for x in 0..32 {
         for y in 0..32 {
@@ -157,6 +158,7 @@ fn ppu_renders_tiling_checkerbox_offset_x() {
     machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
     machine.set_scx(8);
     machine.set_scy(0);
+    machine.lcdc.set_window_enable(false);
 
     for x in 0..32 {
         for y in 0..32 {
@@ -196,6 +198,7 @@ fn ppu_renders_tiling_checkerbox_offset_y() {
     machine.set_memory(VIDEO_RAM_BASE + Tile::BYTE_SIZE, &white_tile as &[u8]);
     machine.set_scx(0);
     machine.set_scy(8);
+    machine.lcdc.set_window_enable(false);
 
     for x in 0..32 {
         for y in 0..32 {
@@ -244,6 +247,7 @@ fn ppu_renders_window(
 
     machine.set_wx(wx);
     machine.set_wy(wy);
+    machine.lcdc.set_window_enable(true);
 
     let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
     let white = u2::new(3);

@@ -307,6 +307,66 @@ enum Button {
     RIGHT,
 }
 
+
+#[derive(Clone, Copy, Debug)]
+pub struct LCDC {
+    bits: u8
+}
+
+impl LCDC {
+    const LCD_ENABLED: u8 = 0b1000_0000;
+    const WINDOW_TILE_MAP_AREA: u8 = 0b0100_0000;
+    const WINDOW_ENABLE: u8 = 0b0010_0000;
+    const BG_WINDOW_TILE_DATA_AREA: u8 = 0b0001_0000;
+    const BG_TILE_MAP: u8 = 0b0000_1000;
+    const OBJ_SIZE: u8 = 0b0000_0100;
+    const OBJ_ENABLE: u8 = 0b0000_0010;
+    const BG_AND_WINDOW_ENABLE: u8 = 0b0000_0001;
+
+
+    pub fn assign_bits(value: u8, mask: u8, to: bool) -> u8 {
+
+        if to {
+            value | mask
+
+        } else {
+            value & !mask
+
+        }
+
+    }
+
+    pub fn set_window_enable(&mut self, to: bool) {
+        self.bits = LCDC::assign_bits(self.bits, LCDC::WINDOW_ENABLE, to);
+    }
+
+    pub fn get_window_enable(&self) -> bool {
+        return self.bits & LCDC::WINDOW_ENABLE == LCDC::WINDOW_ENABLE
+    }
+
+}
+
+
+#[cfg(test)]
+mod lcdc_tests  {
+
+    use super::*;
+    use rstest::rstest;
+
+
+    #[rstest]
+    #[case(true, 0b0010_0000)]
+    #[case(false, 0b0000_0000)]
+    pub fn it_sets_window_enable_bit(#[case] value: bool, #[case] result: u8) {
+        let mut lcdc = LCDC { bits: 0 };
+
+        lcdc.set_window_enable(value);
+        assert_eq!(lcdc.bits,result);
+    }
+
+
+} 
+
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
     let window = web_sys::window().expect("No global 'window' object");
@@ -318,6 +378,12 @@ fn main() -> Result<(), JsValue> {
         .expect("No 'squaregb-root' element");
 
     Ok(())
+}
+
+
+#[wasm_bindgen]
+pub fn set_lcdc5(value: bool) {
+    MACHINE.lock().unwrap().lcdc.set_window_enable(value);
 }
 
 #[wasm_bindgen]
@@ -504,6 +570,7 @@ pub struct Machine {
     scy: u8,
     wx: u8,
     wy: u8,
+    pub lcdc: LCDC,
 }
 
 impl Machine {
@@ -520,6 +587,7 @@ impl Machine {
             scy: 0,
             wx: 0,
             wy: 0,
+            lcdc: LCDC { bits: 0 }
         }
     }
 
@@ -597,25 +665,27 @@ impl Machine {
             }
         }
 
-        for x in 0..(TILE_MAP_WIDTH * Tile::WIDTH) {
-            for y in 0..(TILE_MAP_HEIGHT * Tile::HEIGHT) {
-                // Positioned window
+        if self.lcdc.get_window_enable() {
+            for x in 0..(TILE_MAP_WIDTH * Tile::WIDTH) {
+                for y in 0..(TILE_MAP_HEIGHT * Tile::HEIGHT) {
+                    // Positioned window
 
-                // This will be offscreen
-                if x + (wx as usize) < Tile::WIDTH - 1 {
-                    continue;
-                }
-                let screen_x = x + (wx as usize) - (Tile::WIDTH - 1);
-                let screen_y = y + (wy as usize);
+                    // This will be offscreen
+                    if x + (wx as usize) < Tile::WIDTH - 1 {
+                        continue;
+                    }
+                    let screen_x = x + (wx as usize) - (Tile::WIDTH - 1);
+                    let screen_y = y + (wy as usize);
 
-                if screen_x < SCREEN_WIDTH && screen_y < SCREEN_HEIGHT {
-                    let tile_x = x / 8;
-                    let tile_y = y / 8;
+                    if screen_x < SCREEN_WIDTH && screen_y < SCREEN_HEIGHT {
+                        let tile_x = x / 8;
+                        let tile_y = y / 8;
 
-                    let tile_index = window_tilemap.get_tile_index(tile_x, tile_y);
-                    let tile = tiledata.get_tile(tile_index);
-                    let pixel = tile.get_pixel(x % 8, y % 8);
-                    screen[(screen_y * SCREEN_WIDTH) + screen_x] = pixel;
+                        let tile_index = window_tilemap.get_tile_index(tile_x, tile_y);
+                        let tile = tiledata.get_tile(tile_index);
+                        let pixel = tile.get_pixel(x % 8, y % 8);
+                        screen[(screen_y * SCREEN_WIDTH) + screen_x] = pixel;
+                    }
                 }
             }
         }

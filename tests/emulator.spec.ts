@@ -59,6 +59,7 @@ test("Emulator test rom shows checkerboard", async ({ page }) => {
   const white = [0xff, 0xff, 0xff, 0xff];
 
   await page.getByText("Load Checkerboard ROM").click();
+  await page.getByTestId("input-lcdc.5").setChecked(false);
   await page.getByText("Render screen").click();
 
   await page.waitForTimeout(1000);
@@ -77,6 +78,7 @@ test("Emulator test rom shows scrolling background", async ({ page }) => {
   const white = [0xff, 0xff, 0xff, 0xff];
 
   await page.getByText("Load Checkerboard ROM").click();
+  await page.getByTestId("input-lcdc.5").setChecked(false);
   await page.getByText("Render screen").click();
 
   await page.waitForTimeout(1000);
@@ -109,10 +111,11 @@ test("Emulator test rom shows white window on black background", async ({
   const white = [0xff, 0xff, 0xff, 0xff];
 
   await page.getByText("Load Window ROM").click();
-  await page.getByText("Render screen").click();
+  await page.getByTestId("input-lcdc.5").setChecked(true);
 
   await page.getByTestId("input-wx").fill("0");
   await page.getByTestId("input-wy").fill("77");
+  await page.getByText("Render screen").click();
 
   await page.waitForTimeout(1000);
 
