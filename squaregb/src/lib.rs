@@ -27,7 +27,6 @@ pub const OAM_BASE: usize = 0xFE00;
 pub const OAM_SIZE: usize = 40;
 
 
-
 #[derive(Debug)]
 pub struct Tilemap<'a> {
     data: &'a [u8; Tilemap::WIDTH * Tilemap::HEIGHT],
@@ -113,6 +112,101 @@ mod tiledata_tests {
         assert_eq!(*tile_data.get_tile(0), Tile::new([0xFF; 16]));
 
     }
+}
+
+
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Sprite {
+    y: u8,
+    x: u8,
+    idx: u8,
+    attributes: u8
+}
+
+impl Sprite {
+    const X_OFFSET: u8 = 8;
+    const Y_OFFSET: u8 = 16;
+
+    pub fn adopt(data: &[u8]) -> &Sprite {
+        if data.len() < size_of::<Sprite>() {
+            panic!("Attempt to transmute too little data into a Sprite");
+        }
+
+        unsafe {
+            let x: &[u8; 4] = data.try_into().unwrap();
+            std::mem::transmute(x)
+        }
+
+    }
+
+    pub fn tile_coords(&self, screen_x: u8, screen_y: u8) -> (i16, i16) {
+        // (0 + 8) - 8
+        // (0 + 16) - 16
+        let x = (screen_x + Sprite::X_OFFSET) as i16 - (self.x as i16);
+        let y = (screen_y + Sprite::Y_OFFSET) as i16 - (self.y as i16);
+        (x,y)
+    }
+
+
+    pub fn contains(&self, screen_x: u8, screen_y: u8) -> bool {
+
+        const HEIGHT: u8 = 8;
+        const WIDTH: u8 = 8;
+
+
+        let (tile_x, tile_y) = self.tile_coords(screen_x,screen_y);
+
+
+        tile_x >= 0 && tile_x < (WIDTH as i16) && tile_y >= 0 && tile_y < (HEIGHT as i16)
+
+        // let x_inside = x + Self::X_OFFSET >= self.x && x < self.x;
+        // let y_inside = y + Self::Y_OFFSET >= self.y && y < self.y + (Self::Y_OFFSET - HEIGHT);
+
+        // x_inside && y_inside
+
+    }
+}
+
+
+#[cfg(test)]
+mod sprite_tests {
+
+    use rstest::rstest;
+    use super::Sprite;
+
+    #[rstest]
+    #[case((0,0), (8,16), true)]
+    #[case((0,0), (4,12), true)]
+    #[case((0,0), (1,9), true)]
+    #[case((0,0), (0,0), false)]
+    pub fn test_sprite_contains( #[case] (scr_x, scr_y): (u8, u8), #[case] (spr_x, spr_y): (u8,u8), #[case] inside: bool ) {
+
+        let s = Sprite {
+            x: spr_x,
+            y: spr_y,
+            idx: 0,
+            attributes: 0
+        };
+
+        assert_eq!(s.contains(scr_x,scr_y), inside);
+    }
+
+    #[rstest]
+    #[case((0,0), (0,0), (8,16))]
+    #[case((0,0), (8,16), (0,0))]
+    pub fn test_sprite_tile_coords( #[case] (scr_x, scr_y): (u8, u8), #[case] (spr_x, spr_y): (u8,u8), #[case] (tile_x, tile_y): (i16, i16)) {
+
+        let s = Sprite {
+            x: spr_x,
+            y: spr_y,
+            idx: 0,
+            attributes: 0
+        };
+
+        assert_eq!(s.tile_coords(scr_x,scr_y), (tile_x, tile_y));
+    }
+
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -749,23 +843,20 @@ impl Machine {
         }
 
         
-
-        for x in 0..(SCREEN_WIDTH as isize) {
-            for y in 0..(SCREEN_HEIGHT as isize) {
+        for x in 0..(SCREEN_WIDTH as u8) {
+            for y in 0..(SCREEN_HEIGHT as u8) {
                     for idx in 0..OAM_SIZE {
-                        let object = &self.memory[OAM_BASE + (4 * idx)..OAM_BASE + (4 * (idx +1))];
-                        let obj_y: isize = (object[0] as isize) - 16;
-                        let obj_x: isize = (object[1] as isize) - 8;
-                        let tile_index = object[2];
-                        // let attributes = object[3];
 
-                        let tile = tiledata.get_tile(tile_index as usize);
+                        let object = Sprite::adopt(&self.memory[OAM_BASE + ( size_of::<Sprite>() * idx)..OAM_BASE + (size_of::<Sprite>() * (idx +1))]);
+                        
+                        if object.contains(x,y) {
 
-                        if (x as isize) >= obj_x && (x as isize) < obj_x + 8 && (y as isize) >= obj_y && (y as isize) < obj_y + 8 {
-
-                            let (tile_x, tile_y) = (x - obj_x, y - obj_y);
+                            let tile = tiledata.get_tile(object.idx as usize);
+                            let (tile_x, tile_y) = object.tile_coords(x,y);
                             let pixel = tile.get_pixel(tile_x as usize, tile_y as usize);
+
                             screen[((y as usize) * SCREEN_WIDTH) + (x as usize)] = pixel;
+
                         }
                     }
             }
