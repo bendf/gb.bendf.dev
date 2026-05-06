@@ -145,7 +145,7 @@ test("Emulator test rom shows white sprite centered on black background", async 
   let topLeftColor = await getScreenPixel(page, 0, 0);
   expect(topLeftColor).toStrictEqual(black);
 
-  let centerColor = await getScreenPixel(page, 80, 77);
+  let centerColor = await getScreenPixel(page, 80, 72);
   expect(centerColor).toStrictEqual(white);
 
   let botRightColor = await getScreenPixel(page, 159, 143);

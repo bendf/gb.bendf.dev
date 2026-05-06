@@ -491,11 +491,10 @@ pub fn load_sprite_rom() {
     const BLACK_TILE: [u8; 16] = [0x00; 16];
     const WHITE_TILE: [u8; 16] = [0xFF; 16];
     const ATTRIBUTE_DATA: [u8; 4] = [
-        0x10, // Top of screen
-        0x08, // Left of screen
+        72 + 12, // Top of screen
+        80 + 4, // Left of screen
         0x01, // Tile 1 
         0b0000_0000 // No special attributes
-
     ];
 
     let mut machine = MACHINE.lock().unwrap();
@@ -758,7 +757,7 @@ impl Machine {
                         let obj_y: isize = (object[0] as isize) - 16;
                         let obj_x: isize = (object[1] as isize) - 8;
                         let tile_index = object[2];
-                        let attributes = object[3];
+                        // let attributes = object[3];
 
                         let tile = tiledata.get_tile(tile_index as usize);
 
