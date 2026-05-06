@@ -5,6 +5,7 @@ import init, {
   load_boot_rom,
   load_checkerboard_rom,
   load_window_rom,
+  load_sprite_rom,
   set_scx,
   set_scy,
   set_wx,
@@ -56,6 +57,10 @@ async function setup() {
   document.getElementById("load-window-rom").addEventListener("click", (e) => {
     load_window_rom();
     console.log("Window rom loaded!");
+  });
+  document.getElementById("load-sprite-rom").addEventListener("click", (e) => {
+    load_sprite_rom();
+    console.log("Sprite rom loaded!");
   });
   document
     .getElementById("button-render-screen")

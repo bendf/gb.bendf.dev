@@ -23,6 +23,9 @@ pub const SCREEN_HEIGHT: usize = 144;
 
 pub const TILE_DATA_SIZE: usize = 384;
 
+pub const OAM_BASE: usize = 0xFE00;
+pub const OAM_SIZE: usize = 40;
+
 
 
 #[derive(Debug)]
@@ -483,6 +486,30 @@ pub fn load_window_rom() {
     machine.set_wy(77);
 }
 
+#[wasm_bindgen]
+pub fn load_sprite_rom() {
+    const BLACK_TILE: [u8; 16] = [0x00; 16];
+    const WHITE_TILE: [u8; 16] = [0xFF; 16];
+    const ATTRIBUTE_DATA: [u8; 4] = [
+        0x10, // Top of screen
+        0x08, // Left of screen
+        0x01, // Tile 1 
+        0b0000_0000 // No special attributes
+
+    ];
+
+    let mut machine = MACHINE.lock().unwrap();
+    machine.set_memory(TILE_DATA_BASE, &BLACK_TILE);
+    machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &WHITE_TILE);
+
+    machine.set_memory(OAM_BASE, &ATTRIBUTE_DATA);
+
+    let background_tile_map: [u8; Tilemap::WIDTH * Tilemap::HEIGHT] =
+        [0x00; Tilemap::WIDTH * Tilemap::HEIGHT];
+    machine.set_memory(TILE_MAP_BASE, &background_tile_map);
+
+}
+
 // #[wasm_bindgen]
 // pub fn dump_state() -> String {
 //     let machine = MACHINE.lock().unwrap();
@@ -721,6 +748,31 @@ impl Machine {
                 }
             }
         }
+
+        
+
+        for x in 0..(SCREEN_WIDTH as isize) {
+            for y in 0..(SCREEN_HEIGHT as isize) {
+                    for idx in 0..OAM_SIZE {
+                        let object = &self.memory[OAM_BASE + (4 * idx)..OAM_BASE + (4 * (idx +1))];
+                        let obj_y: isize = (object[0] as isize) - 16;
+                        let obj_x: isize = (object[1] as isize) - 8;
+                        let tile_index = object[2];
+                        let attributes = object[3];
+
+                        let tile = tiledata.get_tile(tile_index as usize);
+
+                        if (x as isize) >= obj_x && (x as isize) < obj_x + 8 && (y as isize) >= obj_y && (y as isize) < obj_y + 8 {
+
+                            let (tile_x, tile_y) = (x - obj_x, y - obj_y);
+                            let pixel = tile.get_pixel(tile_x as usize, tile_y as usize);
+                            screen[((y as usize) * SCREEN_WIDTH) + (x as usize)] = pixel;
+                        }
+                    }
+            }
+
+        }
+        
 
         screen
     }

@@ -2,7 +2,7 @@ use arbitrary_int::u2;
 use squaregb::Machine;
 use squaregb::R8::*;
 use squaregb::{
-    SCREEN_HEIGHT, SCREEN_WIDTH, TILE_DATA_BASE, TILE_MAP_BASE, VIDEO_RAM_BASE,
+    OAM_BASE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_DATA_BASE, TILE_MAP_BASE, VIDEO_RAM_BASE,
     WINDOW_TILE_MAP_BASE,
 };
 use squaregb::{Tile, Tilemap};
@@ -261,6 +261,53 @@ fn ppu_renders_window(
             } else {
                 black
             };
+
+            assert_eq!(pixel, expected_color, "At pixel ({x},{y})");
+        }
+    }
+}
+
+#[rstest]
+fn ppu_renders_sprite(
+    #[values(0, 8, 100, 160, 168)] x_pos: isize,
+    #[values(0, 16, 100, 144, 160)] y_pos: isize,
+) {
+    let mut machine = Machine::new();
+    let black_tile: [u8; 16] = [0x00; 16];
+    let white_tile: [u8; 16] = [0xFF; 16];
+
+    let attribute_data: [u8; 4] = [
+        y_pos as u8, // Top of screen
+        x_pos as u8, // Left of screen
+        0x01,        // Tile 1
+        0b0000_0000, // No special attributes
+    ];
+
+    machine.set_memory(TILE_DATA_BASE, &black_tile);
+    machine.set_memory(TILE_DATA_BASE + Tile::BYTE_SIZE, &white_tile);
+
+    machine.set_memory(OAM_BASE, &attribute_data);
+
+    let background_tile_map: [u8; Tilemap::WIDTH * Tilemap::HEIGHT] =
+        [0x00; Tilemap::WIDTH * Tilemap::HEIGHT];
+    machine.set_memory(TILE_MAP_BASE, &background_tile_map);
+
+    let screen_data: [u2; SCREEN_WIDTH * SCREEN_HEIGHT] = machine.ppu_render_screen();
+    let white = u2::new(3);
+    let black = u2::new(0);
+
+    for x in 0..(SCREEN_WIDTH as isize) {
+        for y in 0..(SCREEN_HEIGHT as isize) {
+            let pixel = screen_data[(SCREEN_WIDTH * (y as usize)) + (x as usize)];
+
+            let (sprite_x, sprite_y) = (x_pos - 8, y_pos - 16);
+
+            let expected_color =
+                if x >= sprite_x && x < sprite_x + 8 && y >= sprite_y && y < sprite_y + 8 {
+                    white
+                } else {
+                    black
+                };
 
             assert_eq!(pixel, expected_color, "At pixel ({x},{y})");
         }

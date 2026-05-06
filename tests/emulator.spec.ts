@@ -125,3 +125,29 @@ test("Emulator test rom shows white window on black background", async ({
   let botRightColor = await getScreenPixel(page, 159, 143);
   expect(botRightColor).toStrictEqual(white);
 });
+
+test("Emulator test rom shows white sprite centered on black background", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const black = [0x00, 0x00, 0x00, 0xff];
+  const white = [0xff, 0xff, 0xff, 0xff];
+
+  await page.getByText("Load Sprite ROM").click();
+  // Disable Window
+  await page.getByTestId("input-lcdc.5").setChecked(false);
+
+  await page.getByText("Render screen").click();
+
+  await page.waitForTimeout(1000);
+
+  let topLeftColor = await getScreenPixel(page, 0, 0);
+  expect(topLeftColor).toStrictEqual(black);
+
+  let centerColor = await getScreenPixel(page, 80, 77);
+  expect(centerColor).toStrictEqual(white);
+
+  let botRightColor = await getScreenPixel(page, 159, 143);
+  expect(botRightColor).toStrictEqual(black);
+});
