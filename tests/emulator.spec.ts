@@ -31,6 +31,8 @@ test("Emulator displays black screen on boot", async ({ page }) => {
 
   await page.waitForTimeout(1000);
 
+  await page.screenshot({ path: "boot_black_screen.png" });
+
   const canvasData = await page.evaluate(() => {
     const screen = document.getElementById("squaregb-screen");
     if (screen instanceof HTMLCanvasElement) {
