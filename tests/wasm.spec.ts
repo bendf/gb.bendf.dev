@@ -10,6 +10,4 @@ test("Runs basic wasm code", async ({ page }) => {
   await page.getByTestId("run-wasm-test").click();
 
   await expect(page.getByTestId("wasm-console")).toHaveText("Hello, World!");
-
-  await page.screenshot({ path: "hello_world.png" });
 });

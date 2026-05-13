@@ -47,10 +47,10 @@ jobs:
       run: npx playwright install --list
     - name: Run Playwright tests
       run: npx playwright test
-    - name: Upload black boot rom png
-      uses: actions/upload-artifact@v7
-      if: always()
-      with:
-        name: 'boot_black_image'
-        path: './boot_black_screen.png'
+    # - name: Upload black boot rom png
+    #   uses: actions/upload-artifact@v7
+    #   if: always()
+    #   with:
+    #     name: 'boot_black_image'
+    #     path: './boot_black_screen.png'
 
