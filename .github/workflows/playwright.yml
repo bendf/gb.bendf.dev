@@ -3,6 +3,21 @@ on:
   push:
     branches: [ ci-updates, main  ]
 jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Setup rust
+        run: sudo apt install rustup && rustup target add wasm32-unknown-unknown && cargo install -f wasm-bindgen-cli
+      - uses: actions/checkout@v6
+      - name: Build crate
+        working-directory: ./squaregb
+        run: ./build.sh
+      - name: Upload Dist folder
+        uses: actions/upload-artifact@v7
+        with:
+          name: 'wasm_dist'
+          path: './dist'
   playwright:
     name: 'Playwright Tests'
     timeout-minutes: 60
@@ -19,6 +34,11 @@ jobs:
       run: npm ci
     # - name: Install Playwright Browsers
     #   run: npx playwright install --with-deps
+    - name: Pull down wasm build
+      uses: actions/download-artifact@v8
+      with: 
+        name: 'wasm_dist'
+        path: './dist'
     - name: Show playwright browsers
       run: npx playwright install --list
     - name: Run Playwright tests
