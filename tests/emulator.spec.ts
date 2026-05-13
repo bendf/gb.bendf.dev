@@ -27,6 +27,7 @@ function getScreenPixel(
 }
 
 test("Emulator displays black screen on boot", async ({ page }) => {
+  page.on("console", (msg) => console.log(msg.text()));
   await page.goto("/");
 
   await page.waitForTimeout(5000);
