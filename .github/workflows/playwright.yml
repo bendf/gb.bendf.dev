@@ -4,7 +4,7 @@ on:
     branches: [ ci-updates, main  ]
 jobs:
   build:
-    uses: ./github/workflows/build.yml
+    uses: ./.github/workflows/build.yml
   playwright:
     name: 'Playwright Tests'
     needs: build
