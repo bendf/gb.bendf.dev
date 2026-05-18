@@ -65,6 +65,27 @@ fn it_runs_boot_rom() {
 }
 
 #[test]
+fn it_increments_m_cycle_counter() {
+    let mut machine = Machine::new();
+
+    let binary = [
+        0x00, // NOP
+        0x3E, // LD A, n8
+        0x11, // ...
+    ];
+
+    machine.set_memory(0x0, &binary);
+    machine.set_pc(0x0000);
+    machine.set_mticks(0x0);
+
+    machine.step();
+    assert_eq!(machine.get_mticks(), 1);
+
+    machine.step();
+    assert_eq!(machine.get_mticks(), 3);
+}
+
+#[test]
 fn ppu_renders_black_background() {
     let mut machine = Machine::new();
 

@@ -500,23 +500,26 @@ mod lcd_status_tests {
     use super::*;
     use rstest::rstest;
 
+
+    const M_CYCLES_PER_SCANLINE : usize = 114;
+    const SCANLINES_PER_FRAME : usize = 154;
+
     #[rstest]
-    pub fn lcd_y_coord_updates() {
+    #[case(0, 0)]
+    #[case(1, 0)]
+    #[case(M_CYCLES_PER_SCANLINE - 1, 0)]
+    #[case(M_CYCLES_PER_SCANLINE, 1)]
+    #[case((M_CYCLES_PER_SCANLINE * SCANLINES_PER_FRAME) - 1, 153)]
+    #[case(M_CYCLES_PER_SCANLINE * SCANLINES_PER_FRAME, 0)]
+    pub fn lcd_y_coord_updates_with_m_cycles(#[case] mtick: usize, #[case] ly: u8 ) {
 
         let mut machine = Machine::new();
 
         let mm_reg_ly = 0xFF44;
         assert_eq!(machine.get_mem8(mm_reg_ly),0);
 
-        let scanline_m_cycles = 114;
-        let scanline_dots = 456;
-        // 114 M-cycles per scanline
-        machine.run_m_cycles(114);
-        assert_eq!(machine.get_mem8(mm_reg_ly), 1);
-        machine.run_m_cycles(scanline_m_cycles * 152);
-        assert_eq!(machine.get_mem8(mm_reg_ly), 153);
-        machine.run_m_cycles(scanline_m_cycles);
-        assert_eq!(machine.get_mem8(mm_reg_ly), 0);
+        machine.set_mticks(mtick);
+        assert_eq!(machine.get_mem8(mm_reg_ly), ly);
     }
 
 
