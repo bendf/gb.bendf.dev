@@ -10,7 +10,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf ./dist && mkdir -p ./dist && cp -rL ./src/* ./dist/",
     "dev": "npx http-server ./src/ --port=8080",
-    "fest": "npx playwright test",
+    "fest": "./scripts/playwright.sh",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev"
   },
