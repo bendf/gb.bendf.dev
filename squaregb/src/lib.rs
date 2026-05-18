@@ -490,9 +490,37 @@ mod lcdc_tests  {
         lcdc.set_window_enable(value);
         assert_eq!(lcdc.bits,result);
     }
-
-
 } 
+
+
+
+#[cfg(test)]
+mod lcd_status_tests {
+
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    pub fn lcd_y_coord_updates() {
+
+        let mut machine = Machine::new();
+
+        let mm_reg_ly = 0xFF44;
+        assert_eq!(machine.get_mem8(mm_reg_ly),0);
+
+        let scanline_m_cycles = 114;
+        let scanline_dots = 456;
+        // 114 M-cycles per scanline
+        machine.run_m_cycles(114);
+        assert_eq!(machine.get_mem8(mm_reg_ly), 1);
+        machine.run_m_cycles(scanline_m_cycles * 152);
+        assert_eq!(machine.get_mem8(mm_reg_ly), 153);
+        machine.run_m_cycles(scanline_m_cycles);
+        assert_eq!(machine.get_mem8(mm_reg_ly), 0);
+    }
+
+
+}
 
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
@@ -721,6 +749,7 @@ pub struct Machine {
     wx: u8,
     wy: u8,
     pub lcdc: LCDC,
+    m_tick: usize,
 }
 
 impl Machine {
@@ -737,8 +766,30 @@ impl Machine {
             scy: 0,
             wx: 0,
             wy: 0,
-            lcdc: LCDC { bits: 0 }
+            lcdc: LCDC { bits: 0 },
+            m_tick: 0,
         }
+    }
+
+    pub fn run_m_cycles(&mut self, cycles: usize) {
+        let target = self.m_tick + cycles;
+        // TODO: handle wrapping add
+        while self.m_tick < target {
+            self.step();
+        }
+
+    }
+
+    pub fn get_mticks(&self) -> usize {
+        self.m_tick
+    }
+
+    pub fn set_mticks(&mut self, value: usize) {
+        self.m_tick = value;
+    }
+
+    pub fn adv_mticks(&mut self, value: usize) {
+        self.m_tick = self.m_tick.wrapping_add(value);
     }
 
     pub fn get_scx(&self) -> u8 {
@@ -1093,16 +1144,19 @@ impl Machine {
                 let value = self.get_r8(src);
                 self.set_r8(dest, value);
                 self.inc_pc();
+                self.adv_mticks(1);
             }
             LoadImm8 { dest, imm } => {
                 self.set_r8(dest, imm);
                 self.adv_pc(2);
+                self.adv_mticks(2);
             }
             LoadIndirectHL { dest } => {
                 let addr = self.get_r16(HL);
                 let value = self.get_mem8(addr);
                 self.set_r8(dest, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             StoreIndirectHL { src } => {
                 let addr = self.get_r16(HL);
@@ -1110,12 +1164,14 @@ impl Machine {
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             StoreImmIndirectHL { imm } => {
                 let addr = self.get_r16(HL);
 
                 self.set_mem8(addr, imm);
-                self.adv_pc(2)
+                self.adv_pc(2);
+                self.adv_mticks(3);
             }
             LoadAccIndirectBC => {
                 let addr = self.get_r16(BC);
@@ -1124,6 +1180,7 @@ impl Machine {
 
                 self.set_r8(A, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             LoadAccIndirectDE => {
                 let addr = self.get_r16(DE);
@@ -1132,6 +1189,7 @@ impl Machine {
 
                 self.set_r8(A, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             StoreAccIndirectBC => {
                 let addr = self.get_r16(BC);
@@ -1139,6 +1197,7 @@ impl Machine {
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             StoreAccIndirectDE => {
                 let addr = self.get_r16(DE);
@@ -1146,18 +1205,21 @@ impl Machine {
 
                 self.set_mem8(addr, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             LoadAcc16 { addr } => {
                 let value = self.get_mem8(addr);
 
                 self.set_r8(A, value);
                 self.adv_pc(3);
+                self.adv_mticks(4);
             }
             StoreAcc16 { addr } => {
                 let value = self.get_r8(A);
 
                 self.set_mem8(addr, value);
                 self.adv_pc(3);
+                self.adv_mticks(4);
             }
             LoadAccIndirectC => {
                 let base: u16 = 0xFF00;
@@ -1166,6 +1228,7 @@ impl Machine {
                 let value = self.get_mem8(addr);
                 self.set_r8(A, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             StoreAccIndirectC => {
                 let base: u16 = 0xFF00;
@@ -1174,6 +1237,7 @@ impl Machine {
                 let value = self.get_r8(A);
                 self.set_mem8(addr, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
             LoadAccDirect8 { offset } => {
                 let base: u16 = 0xFF00;
@@ -1181,6 +1245,7 @@ impl Machine {
                 let value = self.get_mem8(addr);
                 self.set_r8(A, value);
                 self.inc_pc();
+                self.adv_mticks(3);
             }
             StoreAccDirect8 { offset } => {
                 let base: u16 = 0xFF00;
@@ -1188,6 +1253,7 @@ impl Machine {
                 let value = self.get_r8(A);
                 self.set_mem8(addr, value);
                 self.inc_pc();
+                self.adv_mticks(3);
             }
             LoadAccIndirectHLDec => {
                 let addr = self.get_r16(HL);
@@ -1197,6 +1263,7 @@ impl Machine {
                 self.set_r8(A, value);
                 self.inc_pc();
                 self.set_r16(HL, addr - 1);
+                self.adv_mticks(2);
             }
             StoreAccIndirectHLDec => {
                 let addr = self.get_r16(HL);
@@ -1205,6 +1272,7 @@ impl Machine {
                 self.set_mem8(addr, value);
                 self.inc_pc();
                 self.set_r16(HL, addr - 1);
+                self.adv_mticks(2);
             }
             LoadAccIndirectHLInc => {
                 let addr = self.get_r16(HL);
@@ -1214,6 +1282,7 @@ impl Machine {
                 self.set_r8(A, value);
                 self.inc_pc();
                 self.set_r16(HL, addr + 1);
+                self.adv_mticks(2);
             }
             StoreAccIndirectHLInc => {
                 let addr = self.get_r16(HL);
@@ -1222,22 +1291,26 @@ impl Machine {
                 self.set_mem8(addr, value);
                 self.inc_pc();
                 self.set_r16(HL, addr + 1);
+                self.adv_mticks(2);
             }
             LoadImm16 { dest, imm } => {
                 self.set_r16(dest, imm);
                 self.adv_pc(3);
+                self.adv_mticks(3);
             }
 
             StoreSP16 { addr } => {
                 let value = self.get_r16(SP);
                 self.set_mem16(addr, value);
                 self.adv_pc(3);
+                self.adv_mticks(5);
             }
 
             LoadSPHL => {
                 let value = self.get_r16(HL);
                 self.set_r16(SP, value);
                 self.inc_pc();
+                self.adv_mticks(2);
             }
 
             Push { src } => {
@@ -1247,6 +1320,7 @@ impl Machine {
 
                 self.set_sp(sp - 2);
                 self.inc_pc();
+                self.adv_mticks(4);
             }
             Pop { dest } => {
                 let sp = self.get_r16(SP);
@@ -1255,6 +1329,7 @@ impl Machine {
 
                 self.set_sp(sp + 2);
                 self.inc_pc();
+                self.adv_mticks(3);
             }
             LoadHLSPOffset { offset } => {
                 let sp = self.get_r16(SP);
@@ -1278,6 +1353,7 @@ impl Machine {
                 self.assign_flag(Carry, carry);
 
                 self.adv_pc(0x02);
+                self.adv_mticks(3);
             }
 
             Add8 { src } => {
@@ -1295,6 +1371,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_add(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(1);
             }
             Add8IndirectHL => {
                 let x = self.get_r8(A);
@@ -1312,6 +1389,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_add(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             AddImm8 { imm } => {
                 let x = self.get_r8(A);
@@ -1328,6 +1406,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_add(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             AddC8 { src } => {
                 let x = self.get_r8(A);
@@ -1353,6 +1432,7 @@ impl Machine {
 
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(1);
             }
             AddC8IndirectHL => {
                 let x = self.get_r8(A);
@@ -1378,6 +1458,7 @@ impl Machine {
                 let half_carry = half_carry | half_carry2;
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             AddCImm8 { imm } => {
                 let x = self.get_r8(A);
@@ -1402,6 +1483,7 @@ impl Machine {
                 let half_carry = half_carry | half_carry2;
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             Sub8 { src } => {
                 let x = self.get_r8(A);
@@ -1418,6 +1500,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(1);
             }
             Sub8IndirectHL => {
                 let x = self.get_r8(A);
@@ -1435,6 +1518,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             SubImm8 { imm } => {
                 let x = self.get_r8(A);
@@ -1451,6 +1535,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             SubC8 { src } => {
                 let x = self.get_r8(A);
@@ -1476,6 +1561,7 @@ impl Machine {
 
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(1);
             }
             SubC8IndirectHL => {
                 let x = self.get_r8(A);
@@ -1501,6 +1587,7 @@ impl Machine {
                 let half_carry = half_carry | half_carry2;
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(1);
             }
             SubCImm8 { imm } => {
                 let x = self.get_r8(A);
@@ -1525,6 +1612,7 @@ impl Machine {
                 let half_carry = half_carry | half_carry2;
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             Cmp8 { src } => {
                 let x = self.get_r8(A);
@@ -1540,6 +1628,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(1);
             }
             Cmp8IndirectHL => {
                 let x = self.get_r8(A);
@@ -1556,6 +1645,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             CmpImm8 { imm } => {
                 let x = self.get_r8(A);
@@ -1571,6 +1661,7 @@ impl Machine {
                 let (_, half_carry) = x_3_0.overflowing_sub(y_3_0);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
             Inc8 { src } => {
                 let x = self.get_r8(src);
@@ -1585,6 +1676,7 @@ impl Machine {
                 let x_3_0 = u4::extract_u8(x, 0);
                 let (_, half_carry) = x_3_0.overflowing_add(u4::new(1u8));
                 self.assign_flag(HalfCarryBCD, half_carry);
+                self.adv_mticks(1);
             }
             Inc8IndirectHL => {
                 let addr = self.get_r16(HL);
@@ -1600,6 +1692,7 @@ impl Machine {
                 let x_3_0 = u4::extract_u8(x, 0);
                 let (_, half_carry) = x_3_0.overflowing_add(u4::new(1u8));
                 self.assign_flag(HalfCarryBCD, half_carry);
+                self.adv_mticks(3);
             }
             Dec8 { src } => {
                 let x = self.get_r8(src);
@@ -1614,6 +1707,7 @@ impl Machine {
                 let x_3_0 = u4::extract_u8(x, 0);
                 let (_, half_carry) = x_3_0.overflowing_sub(u4::new(1u8));
                 self.assign_flag(HalfCarryBCD, half_carry);
+                self.adv_mticks(1);
             }
             Dec8IndirectHL => {
                 let addr = self.get_r16(HL);
@@ -1629,6 +1723,7 @@ impl Machine {
                 let x_3_0 = u4::extract_u8(x, 0);
                 let (_, half_carry) = x_3_0.overflowing_sub(u4::new(1u8));
                 self.assign_flag(HalfCarryBCD, half_carry);
+                self.adv_mticks(3);
             }
 
             And8 { src } => {
@@ -1643,6 +1738,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(1);
             }
 
             And8IndirectHL => {
@@ -1658,6 +1754,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             AndImm8 { imm } => {
@@ -1672,6 +1769,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             Or8 { src } => {
@@ -1686,6 +1784,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(1);
             }
 
             Or8IndirectHL => {
@@ -1701,6 +1800,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             OrImm8 { imm } => {
@@ -1715,6 +1815,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             Xor8 { src } => {
@@ -1729,6 +1830,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(1);
             }
 
             Xor8IndirectHL => {
@@ -1744,6 +1846,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             XorImm8 { imm } => {
@@ -1758,6 +1861,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             CmplCarryFlag => {
@@ -1767,6 +1871,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, !carry);
+                self.adv_mticks(1);
             }
 
             SetCarryFlag => {
@@ -1774,6 +1879,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.set_flag(Carry);
+                self.adv_mticks(1);
             }
 
             DecAdjAcc => {
@@ -1826,6 +1932,7 @@ impl Machine {
                 // We've bailed out on the DAA and need to indicate the value left has not been
                 // adjusted.
                 self.assign_flag(Carry, res > 0x99 || cry);
+                self.adv_mticks(1);
             }
 
             CmplAcc => {
@@ -1837,6 +1944,7 @@ impl Machine {
 
                 self.set_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
+                self.adv_mticks(1);
             }
             Inc16 { src } => {
                 let value = self.get_r16(src);
@@ -1844,6 +1952,7 @@ impl Machine {
 
                 self.inc_pc();
                 self.set_r16(src, res);
+                self.adv_mticks(2);
             }
 
             Dec16 { src } => {
@@ -1852,6 +1961,7 @@ impl Machine {
 
                 self.inc_pc();
                 self.set_r16(src, res);
+                self.adv_mticks(2);
             }
             Add16HL { src } => {
                 let base = self.get_r16(HL);
@@ -1867,6 +1977,7 @@ impl Machine {
 
                 self.assign_flag(Carry, carry);
                 self.assign_flag(HalfCarryBCD, half_carry);
+                self.adv_mticks(2);
             }
 
             AddSPImm8 { imm } => {
@@ -1896,6 +2007,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.assign_flag(HalfCarryBCD, half_carry);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             RLCA => {
@@ -1909,6 +2021,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, u1::extract_u8(res, 0).into());
+                self.adv_mticks(1);
             }
 
             RRCA => {
@@ -1922,6 +2035,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, u1::extract_u8(value, 0).into());
+                self.adv_mticks(1);
             }
 
             RLA => {
@@ -1938,6 +2052,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, tc);
+                self.adv_mticks(1);
             }
 
             RRA => {
@@ -1954,6 +2069,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, tc);
+                self.adv_mticks(1);
             }
 
             RLC { src } => {
@@ -1969,6 +2085,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             RLCIndirectHL => {
@@ -1985,6 +2102,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             RRC { src } => {
@@ -2000,6 +2118,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             RRCIndirectHL => {
@@ -2016,6 +2135,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             RL { src } => {
@@ -2033,6 +2153,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             RLIndirectHL => {
@@ -2052,6 +2173,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             RR { src } => {
@@ -2069,6 +2191,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             RRIndirectHL => {
@@ -2087,6 +2210,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             SLA { src } => {
@@ -2102,6 +2226,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             SLAIndirectHL => {
@@ -2118,6 +2243,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             SRA { src } => {
@@ -2133,6 +2259,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             SRAIndirectHL => {
@@ -2149,6 +2276,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             Swap { src } => {
@@ -2165,6 +2293,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(2);
             }
 
             SwapIndirectHL => {
@@ -2182,6 +2311,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.clear_flag(Carry);
+                self.adv_mticks(4);
             }
 
             SRL { src } => {
@@ -2197,6 +2327,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(2);
             }
 
             SRLIndirectHL => {
@@ -2213,6 +2344,7 @@ impl Machine {
                 self.clear_flag(SubBCD);
                 self.clear_flag(HalfCarryBCD);
                 self.assign_flag(Carry, carry);
+                self.adv_mticks(4);
             }
 
             BIT { src, bit } => {
@@ -2225,6 +2357,7 @@ impl Machine {
                 self.assign_flag(Zero, bit_set);
                 self.clear_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
+                self.adv_mticks(2);
             }
 
             BITIndirectHL { bit } => {
@@ -2238,6 +2371,7 @@ impl Machine {
                 self.assign_flag(Zero, bit_set);
                 self.clear_flag(SubBCD);
                 self.set_flag(HalfCarryBCD);
+                self.adv_mticks(3);
             }
 
             RES { src, bit } => {
@@ -2249,6 +2383,7 @@ impl Machine {
                 self.adv_pc(2);
 
                 self.set_r8(src, res);
+                self.adv_mticks(2);
 
                 // No flags affected.
             }
@@ -2263,6 +2398,7 @@ impl Machine {
 
                 self.adv_pc(2);
                 self.set_mem8(addr, res);
+                self.adv_mticks(4);
 
                 // No flags affected.
             }
@@ -2276,6 +2412,7 @@ impl Machine {
                 self.adv_pc(2);
 
                 self.set_r8(src, res);
+                self.adv_mticks(2);
 
                 // No flags affected.
             }
@@ -2290,17 +2427,20 @@ impl Machine {
 
                 self.adv_pc(2);
                 self.set_mem8(addr, res);
+                self.adv_mticks(4);
 
                 // No flags affected.
             }
 
             JP { addr } => {
                 self.set_pc(addr);
+                self.adv_mticks(4);
             }
 
             JPHL => {
                 let addr = self.get_r16(HL);
                 self.set_pc(addr);
+                self.adv_mticks(1);
             }
 
             JPCC { cond, addr } => {
@@ -2316,8 +2456,10 @@ impl Machine {
 
                 if res {
                     self.set_pc(addr);
+                    self.adv_mticks(4);
                 } else {
                     self.adv_pc(3);
+                    self.adv_mticks(3);
                 }
             }
 
@@ -2326,6 +2468,7 @@ impl Machine {
 
                 let (pc, _) = pc.overflowing_add_signed(offset as i16);
                 self.set_pc(pc);
+                self.adv_mticks(3);
             }
 
             JRCC { cond, offset } => {
@@ -2343,8 +2486,10 @@ impl Machine {
                     let pc = self.get_pc();
                     let (pc, _) = pc.overflowing_add_signed(offset as i16);
                     self.set_pc(pc);
+                    self.adv_mticks(3);
                 } else {
                     self.adv_pc(2);
+                    self.adv_mticks(2);
                 }
             }
             Call { addr } => {
@@ -2359,6 +2504,7 @@ impl Machine {
                 self.set_mem16(new_sp, ret_address);
 
                 self.set_pc(addr);
+                self.adv_mticks(6);
             }
 
             CallCC { addr, cond } => {
@@ -2383,8 +2529,10 @@ impl Machine {
                     self.set_mem16(new_sp, ret_address);
 
                     self.set_pc(addr);
+                    self.adv_mticks(6);
                 } else {
                     self.adv_pc(3);
+                    self.adv_mticks(3);
                 }
             }
 
@@ -2394,6 +2542,7 @@ impl Machine {
 
                 self.set_pc(return_address);
                 self.set_sp(sp.wrapping_add(2));
+                self.adv_mticks(4);
             }
 
             RetCC { cond } => {
@@ -2413,8 +2562,10 @@ impl Machine {
                 if res {
                     self.set_pc(return_address);
                     self.set_sp(sp.wrapping_add(2));
+                    self.adv_mticks(5);
                 } else {
                     self.inc_pc();
+                    self.adv_mticks(2);
                 }
             }
 
@@ -2426,6 +2577,7 @@ impl Machine {
                 self.set_sp(sp.wrapping_add(2));
 
                 self.set_ime();
+                self.adv_mticks(4);
             }
 
             RST { addr } => {
@@ -2439,6 +2591,7 @@ impl Machine {
                 self.set_mem16(new_sp, ret_address);
 
                 self.set_pc(addr as u16);
+                self.adv_mticks(4);
             }
 
             Halt => {
@@ -2452,15 +2605,18 @@ impl Machine {
             DI => {
                 self.inc_pc();
                 self.clear_ime();
+                self.adv_mticks(1);
             }
 
             EI => {
                 self.inc_pc();
                 self.set_ime();
+                self.adv_mticks(1);
             }
 
             NOP => {
                 self.inc_pc();
+                self.adv_mticks(1);
             }
 
             Stop { ignore: _ } => {
@@ -4040,6 +4196,7 @@ mod exec_tests {
     use rstest::rstest;
 
     #[rstest]
+    /// LD r, r'
     fn it_execs_load_reg(
         #[values(B, C, D, E, H, L, A)] src: R8,
         #[values(B, C, D, E, H, L, A)] dest: R8,
@@ -4047,6 +4204,7 @@ mod exec_tests {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         machine.set_r8(src, 0xFF);
         machine.set_r8(dest, 0x0C);
@@ -4057,9 +4215,11 @@ mod exec_tests {
 
         assert_eq!(machine.get_r8(src), machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     #[rstest]
+    /// LD r,n
     fn it_execs_load_imm8(
         #[values(B, C, D, E, H, L, A)] dest: R8,
         #[values(0x00, 0x01, 0xFE, 0xFF)] imm: u8,
@@ -4068,21 +4228,25 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(dest, 0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::LoadImm8 { imm, dest };
         machine.exec(ins);
 
         assert_eq!(imm, machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x02);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
     #[rstest]
+    /// LD r, (HL)
     fn it_execs_load_indirect_hl_8(#[values(B, C, D, E, H, L, A)] dest: R8) {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
         machine.set_r8(dest, 0x00);
         machine.set_r16(HL, 0x0001);
+        machine.set_mticks(0x00);
 
         machine.set_memory(1, &[0xFE]);
 
@@ -4091,8 +4255,11 @@ mod exec_tests {
 
         assert_eq!(0xFE, machine.get_r8(dest));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
+
     }
 
+    /// LD (HL), r
     #[rstest]
     fn it_execs_store_indirect_hl_8(#[values(B, C, D, E, A)] src: R8) {
         let mut machine = Machine::new();
@@ -4100,6 +4267,8 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(src, 0xFE);
         machine.set_r16(HL, 0x0001);
+        machine.set_mticks(0x00);
+
 
         machine.set_memory(1, &[0x00]);
 
@@ -4108,14 +4277,17 @@ mod exec_tests {
 
         assert_eq!(0xFE, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD (HL), n
     #[rstest]
     fn it_execs_store_imm_indirect_hl_8(#[values(0x01, 0xFF)] imm: u8) {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
         machine.set_r16(HL, 0x0001);
+        machine.set_mticks(0x00);
 
         machine.set_memory(1, &[0x00]);
 
@@ -4124,7 +4296,9 @@ mod exec_tests {
 
         assert_eq!(imm, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x02);
+        assert_eq!(machine.get_mticks(), 0x03);
     }
+    /// LD A, (BC)
     #[test]
     fn it_execs_load_acc_indirect_bc() {
         let mut machine = Machine::new();
@@ -4134,6 +4308,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
         machine.set_r16(BC, 0x0001);
+        machine.set_mticks(0x00);
 
         machine.set_memory(1, &[value]);
 
@@ -4142,8 +4317,10 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD A, (DE)
     #[test]
     fn it_execs_load_acc_indirect_de() {
         let mut machine = Machine::new();
@@ -4153,6 +4330,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
         machine.set_r16(DE, 0x0001);
+        machine.set_mticks(0x00);
 
         machine.set_memory(1, &[value]);
 
@@ -4161,8 +4339,10 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD (BC), A
     #[test]
     fn it_execs_store_acc_indirect_bc() {
         let mut machine = Machine::new();
@@ -4173,14 +4353,17 @@ mod exec_tests {
         machine.set_r8(A, value);
         machine.set_r16(BC, 0x0001);
         machine.set_memory(1, &[0x00]);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::StoreAccIndirectBC;
         machine.exec(ins);
 
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD (DE), A
     #[test]
     fn it_execs_store_acc_indirect_de() {
         let mut machine = Machine::new();
@@ -4191,14 +4374,17 @@ mod exec_tests {
         machine.set_r8(A, value);
         machine.set_r16(DE, 0x0001);
         machine.set_memory(1, &[0x00]);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::StoreAccIndirectDE;
         machine.exec(ins);
 
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD A, (nn)
     #[rstest]
     fn it_execs_load_acc_16(#[values(0x0001, 0xFFFF)] addr: u16) {
         let mut machine = Machine::new();
@@ -4207,13 +4393,16 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_memory(addr as usize, &[value]);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::LoadAcc16 { addr };
         machine.exec(ins);
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x03);
+        assert_eq!(machine.get_mticks(), 0x04);
     }
+    /// LD (nn), A
     #[rstest]
     fn it_execs_store_acc_16(#[values(0x0001, 0xFFFF)] addr: u16) {
         let mut machine = Machine::new();
@@ -4223,13 +4412,17 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, value);
         machine.set_memory(addr as usize, &[0x00]);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::StoreAcc16 { addr };
         machine.exec(ins);
 
         assert_eq!(value, machine.get_mem8(addr));
         assert_eq!(machine.get_pc(), 0x03);
+        assert_eq!(machine.get_mticks(), 0x04);
     }
+
+    /// LDH A, (C)
     #[rstest]
     fn it_execs_load_acc_indirect_c(#[values(0x01, 0xFF)] offset: u8) {
         let mut machine = Machine::new();
@@ -4241,6 +4434,7 @@ mod exec_tests {
 
         machine.set_r8(A, 0x00);
         machine.set_r8(C, offset);
+        machine.set_mticks(0x00);
 
         let addr: u16 = base + (offset as u16);
         machine.set_memory(addr as usize, &[value]);
@@ -4250,7 +4444,9 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
+    /// LDH (C), A
     #[rstest]
     fn it_execs_store_acc_indirect_c(#[values(0x01, 0xFF)] offset: u8) {
         let mut machine = Machine::new();
@@ -4262,6 +4458,7 @@ mod exec_tests {
 
         machine.set_r8(A, value);
         machine.set_r8(C, offset);
+        machine.set_mticks(0x00);
 
         let addr: u16 = base + (offset as u16);
         machine.set_memory(addr as usize, &[0x00]);
@@ -4271,8 +4468,10 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_mem8(addr));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LDH A, (n)
     #[rstest]
     fn it_execs_load_acc_direct_8(#[values(0x01, 0xFF)] offset: u8) {
         let mut machine = Machine::new();
@@ -4281,6 +4480,7 @@ mod exec_tests {
         let value = 0xFE;
 
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         let addr: u16 = base + (offset as u16);
         machine.set_memory(addr as usize, &[value]);
@@ -4290,8 +4490,10 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// LDH (n), A
     #[rstest]
     fn it_execs_store_acc_direct_8(#[values(0x01, 0xFF)] offset: u8) {
         let mut machine = Machine::new();
@@ -4301,6 +4503,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, value);
+        machine.set_mticks(0x00);
 
         let addr: u16 = base + (offset as u16);
         machine.set_memory(addr as usize, &[0x00]);
@@ -4310,8 +4513,10 @@ mod exec_tests {
 
         assert_eq!(value, machine.get_mem8(addr));
         assert_eq!(machine.get_pc(), 0x01);
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// LD A, (HL-)
     #[test]
     fn it_execs_load_acc_indirect_hl_dec() {
         let mut machine = Machine::new();
@@ -4321,6 +4526,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
         machine.set_r16(HL, 0x0001);
+        machine.set_mticks(0x00);
 
         machine.set_memory(1, &[value]);
 
@@ -4330,8 +4536,10 @@ mod exec_tests {
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
         assert_eq!(0x00, machine.get_r16(HL));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    // LD (HL-), A
     #[test]
     fn it_execs_store_acc_indirect_dec() {
         let mut machine = Machine::new();
@@ -4342,6 +4550,7 @@ mod exec_tests {
         machine.set_r8(A, value);
         machine.set_r16(HL, 0x0001);
         machine.set_memory(1, &[0x00]);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::StoreAccIndirectHLDec;
         machine.exec(ins);
@@ -4349,7 +4558,10 @@ mod exec_tests {
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
         assert_eq!(0x00, machine.get_r16(HL));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
+
+    /// LD A, (HL+)
     #[test]
     fn it_execs_load_acc_indirect_hl_inc() {
         let mut machine = Machine::new();
@@ -4359,6 +4571,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, 0x0);
         machine.set_r16(HL, 0x0001);
+        machine.set_mticks(0x00);
 
         machine.set_memory(1, &[value]);
 
@@ -4368,8 +4581,10 @@ mod exec_tests {
         assert_eq!(value, machine.get_r8(A));
         assert_eq!(machine.get_pc(), 0x01);
         assert_eq!(0x02, machine.get_r16(HL));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD (HL+), A
     #[test]
     fn it_execs_store_acc_indirect_inc() {
         let mut machine = Machine::new();
@@ -4380,6 +4595,7 @@ mod exec_tests {
         machine.set_r8(A, value);
         machine.set_r16(HL, 0x0001);
         machine.set_memory(1, &[0x00]);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::StoreAccIndirectHLInc;
         machine.exec(ins);
@@ -4387,8 +4603,10 @@ mod exec_tests {
         assert_eq!(value, machine.get_mem8(0x0001));
         assert_eq!(machine.get_pc(), 0x01);
         assert_eq!(0x02, machine.get_r16(HL));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// LD rr, nn
     #[rstest]
     fn it_execs_load_imm_16(
         #[values(BC, DE, HL, SP)] dest: R16,
@@ -4397,42 +4615,51 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r16(dest, 0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::LoadImm16 { dest, imm };
         machine.exec(ins);
 
         assert_eq!(imm, machine.get_r16(dest));
         assert_eq!(0x03, machine.get_pc());
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// LD (nn), SP
     #[rstest]
     fn it_execs_store_sp_16(#[values(0x0000, 0xFFFE)] addr: u16) {
         let mut machine = Machine::new();
         let value = 0xFEEF;
         machine.set_pc(0x00);
         machine.set_r16(SP, value);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::StoreSP16 { addr };
         machine.exec(ins);
 
         assert_eq!(value, machine.get_mem16(addr));
         assert_eq!(0x03, machine.get_pc());
+        assert_eq!(machine.get_mticks(), 0x05);
     }
 
+    /// LD SP, HL
     #[rstest]
     fn it_execs_load_sp_hl(#[values(0x0001, 0xFFFF)] value: u16) {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r16(HL, value);
         machine.set_r16(SP, 0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::LoadSPHL;
         machine.exec(ins);
 
         assert_eq!(value, machine.get_r16(SP));
         assert_eq!(0x01, machine.get_pc());
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// PUSH rr
     #[rstest]
     fn it_execs_push(#[values(BC, DE, HL, AF)] src: R16) {
         let mut machine = Machine::new();
@@ -4441,6 +4668,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(src, value);
         machine.set_sp(0xFFFF);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Push { src };
         machine.exec(ins);
@@ -4449,7 +4677,10 @@ mod exec_tests {
         assert_eq!(0xFFFD, new_sp);
         assert_eq!(value, machine.get_mem16(new_sp + 1));
         assert_eq!(0x01, machine.get_pc());
+        assert_eq!(machine.get_mticks(), 0x04);
     }
+
+    /// POP rr
     #[rstest]
     fn it_execs_pop(#[values(BC, DE, HL, AF)] dest: R16) {
         let mut machine = Machine::new();
@@ -4458,6 +4689,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_sp(0xFFFD);
         machine.set_mem16(0xFFFE, value);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Pop { dest };
         machine.exec(ins);
@@ -4466,8 +4698,10 @@ mod exec_tests {
         assert_eq!(0xFFFF, new_sp);
         assert_eq!(value, machine.get_mem16(new_sp - 1));
         assert_eq!(0x01, machine.get_pc());
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// LD HL, SP+e
     #[rstest]
     #[case(0xFFFF, 0x00, (false, false, false, false))]
     // LD HL,SP+e always sets zero flag = 0
@@ -4486,6 +4720,7 @@ mod exec_tests {
         machine.set_r16(SP, sp);
         machine.set_r16(HL, 0);
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::LoadHLSPOffset { offset };
         machine.exec(ins);
@@ -4521,8 +4756,10 @@ mod exec_tests {
             machine.get_flag(Carry),
             carry
         );
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// ADD r
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, false, false, false))]
     #[case(0x00, 0x01, 0x01, (false, false, false, false))]
@@ -4540,6 +4777,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(src, y);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Add8 { src };
         machine.exec(ins);
@@ -4551,6 +4789,7 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     // Special set of tests for Add A,A
@@ -4568,6 +4807,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, a);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Add8 { src: A };
         machine.exec(ins);
@@ -4579,8 +4819,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// ADD (HL)
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, false, false, false))]
     #[case(0x00, 0x01, 0x01, (false, false, false, false))]
@@ -4600,6 +4842,7 @@ mod exec_tests {
         let addr = 0x00FF;
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, y);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Add8IndirectHL;
         machine.exec(ins);
@@ -4611,8 +4854,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// ADD n
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, false, false, false))]
     #[case(0x00, 0x01, 0x01, (false, false, false, false))]
@@ -4628,6 +4873,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::AddImm8 { imm: y };
         machine.exec(ins);
@@ -4639,8 +4885,9 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
-    // ADDC R8, A
+    // ADC r
     #[rstest]
     #[case(0x00, 0x00, false, 0x00, (true, false, false, false))]
     #[case(0x00, 0x00, true, 0x01, (false, false, false, false))]
@@ -4667,6 +4914,7 @@ mod exec_tests {
         machine.set_r8(A, x);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::AddC8 { src };
         machine.exec(ins);
@@ -4678,9 +4926,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
-    // Special set of tests for Add A,A
+    // Special set of tests for ADC A,A
     #[rstest]
     #[case(0x00, 0x00, false, (true, false, false, false))]
     #[case(0x00, 0x01, true, (false, false, false, false))]
@@ -4703,6 +4952,7 @@ mod exec_tests {
         machine.set_r8(A, a);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::AddC8 { src: A };
         machine.exec(ins);
@@ -4714,8 +4964,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// ADC (HL)
     #[rstest]
     #[case(0x00, 0x00, false, 0x00, (true, false, false, false))]
     #[case(0x00, 0x00, true, 0x01, (false, false, false, false))]
@@ -4741,6 +4993,7 @@ mod exec_tests {
         machine.set_r8(A, x);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let addr = 0x00FF;
         machine.set_r16(HL, addr);
@@ -4756,8 +5009,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// ADC n
     #[rstest]
     #[case(0x00, 0x00, false, 0x00, (true, false, false, false))]
     #[case(0x00, 0x00, true, 0x01, (false, false, false, false))]
@@ -4783,6 +5038,7 @@ mod exec_tests {
         machine.set_r8(A, x);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::AddCImm8 { imm: y };
         machine.exec(ins);
@@ -4794,9 +5050,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
-    // SUB R8, A
+    // SUB r
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, true, false, false))]
     #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
@@ -4814,6 +5071,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(src, y);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Sub8 { src };
         machine.exec(ins);
@@ -4825,6 +5083,7 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     // Special set of tests for Sub A,A
@@ -4839,6 +5098,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, a);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Sub8 { src: A };
         machine.exec(ins);
@@ -4850,8 +5110,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// SUB (HL)
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, true, false, false))]
     #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
@@ -4866,6 +5128,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let addr = 0x00FF;
         machine.set_r16(HL, addr);
@@ -4881,8 +5144,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// SUB n
     #[rstest]
     #[case(0x00, 0x00, 0x00, (true, true, false, false))]
     #[case(0x00, 0x01, 0xFF, (false, true, true, true))]
@@ -4898,6 +5163,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SubImm8 { imm: y };
         machine.exec(ins);
@@ -4909,6 +5175,7 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
     // SUBC R8, A
     #[rstest]
@@ -4939,6 +5206,7 @@ mod exec_tests {
         machine.set_r8(A, x);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SubC8 { src };
         machine.exec(ins);
@@ -4950,6 +5218,7 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     // Special set of tests for SubC A,A
@@ -4971,6 +5240,7 @@ mod exec_tests {
         machine.set_r8(A, a);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SubC8 { src: A };
         machine.exec(ins);
@@ -4982,8 +5252,11 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+
+    /// SBC (HL)
     #[rstest]
     #[case(0x00, 0x00, false, 0x00, (true, true, false, false))]
     #[case(0x00, 0x00, true, 0xFF, (false, true, true, true))]
@@ -5007,6 +5280,8 @@ mod exec_tests {
         machine.set_r8(A, x);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
+
 
         let addr = 0x00FF;
         machine.set_r16(HL, addr);
@@ -5022,8 +5297,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// SBC nn
     #[rstest]
     #[case(0x00, 0x00, false, 0x00, (true, true, false, false))]
     #[case(0x00, 0x00, true, 0xFF, (false, true, true, true))]
@@ -5047,6 +5324,7 @@ mod exec_tests {
         machine.set_r8(A, x);
         machine.set_r8(F, 0);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SubCImm8 { imm: y };
         machine.exec(ins);
@@ -5058,6 +5336,7 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
     // CMP R8, A
@@ -5077,6 +5356,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(src, y);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Cmp8 { src };
         machine.exec(ins);
@@ -5088,6 +5368,7 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     // Special set of tests for CMP A,A
@@ -5115,6 +5396,7 @@ mod exec_tests {
         assert_eq!(carry, machine.get_flag(Carry));
     }
 
+    /// CP (HL)
     #[rstest]
     #[case(0x00, 0x00, (true, true, false, false))]
     #[case(0x00, 0x01, (false, true, true, true))]
@@ -5128,6 +5410,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let addr = 0x00FF;
         machine.set_r16(HL, addr);
@@ -5143,8 +5426,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// CP n
     #[rstest]
     #[case(0x00, 0x00, (true, true, false, false))]
     #[case(0x00, 0x01, (false, true, true, true))]
@@ -5159,6 +5444,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::CmpImm8 { imm: y };
         machine.exec(ins);
@@ -5170,8 +5456,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// INC r
     #[rstest]
     #[case(0x00, 0x01, (false, false, false, false))]
     #[case(0xF, 0x10, (false, false, true, false))]
@@ -5186,6 +5474,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Inc8 { src };
         machine.exec(ins);
@@ -5197,8 +5486,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// INC (HL)
     #[rstest]
     #[case(0x00, 0x01, (false, false, false, false))]
     #[case(0xF, 0x10, (false, false, true, false))]
@@ -5214,6 +5505,7 @@ mod exec_tests {
 
         machine.set_r16(HL, 0x0001);
         machine.set_mem8(0x0001, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Inc8IndirectHL;
         machine.exec(ins);
@@ -5225,8 +5517,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// DEC r
     #[rstest]
     // NB Dec does not affect carry flag
     #[case(0x01, 0x00, (true, true, false, false))]
@@ -5242,6 +5536,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Dec8 { src };
         machine.exec(ins);
@@ -5253,8 +5548,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// DEC (HL)
     #[rstest]
     // NB Dec does not affect carry flag.
     #[case(0x01, 0x00, (true, true, false, false))]
@@ -5271,6 +5568,7 @@ mod exec_tests {
 
         machine.set_r16(HL, 0x0001);
         machine.set_mem8(0x0001, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Dec8IndirectHL;
         machine.exec(ins);
@@ -5282,8 +5580,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// AND r
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0xFF)]
@@ -5299,6 +5599,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, x);
         machine.set_r8(src, y);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::And8 { src };
         machine.exec(ins);
@@ -5310,8 +5611,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// AND (HL)
     #[rstest]
     #[case(0x00)]
     #[case(0xFF)]
@@ -5320,6 +5623,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::And8 { src: A };
         machine.exec(ins);
@@ -5331,8 +5635,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// AND n
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0xFF)]
@@ -5342,6 +5648,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let addr = 0x0001;
         machine.set_r16(HL, addr);
@@ -5357,8 +5664,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// OR r
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0xFF)]
@@ -5368,6 +5677,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::AndImm8 { imm: y };
         machine.exec(ins);
@@ -5379,8 +5689,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// OR (HL)
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0xFF)]
@@ -5396,6 +5708,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, x);
         machine.set_r8(src, y);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Or8 { src };
         machine.exec(ins);
@@ -5407,8 +5720,11 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+
+    /// OR n
     #[rstest]
     #[case(0x00)]
     #[case(0xFF)]
@@ -5417,6 +5733,9 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
+
+
 
         let ins = Instruction::Or8 { src: A };
         machine.exec(ins);
@@ -5428,8 +5747,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// OR (HL)
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0xFF)]
@@ -5439,6 +5760,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let addr = 0x0001;
         machine.set_r16(HL, addr);
@@ -5454,8 +5776,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// OR n
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0xFF)]
@@ -5465,6 +5789,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::OrImm8 { imm: y };
         machine.exec(ins);
@@ -5476,8 +5801,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// XOR r
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0x00)]
@@ -5493,6 +5820,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, x);
         machine.set_r8(src, y);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Xor8 { src };
         machine.exec(ins);
@@ -5504,6 +5832,7 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     #[rstest]
@@ -5514,6 +5843,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Xor8 { src: A };
         machine.exec(ins);
@@ -5525,8 +5855,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// XOR (HL)
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0x00)]
@@ -5536,6 +5868,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let addr = 0x0001;
         machine.set_r16(HL, addr);
@@ -5551,8 +5884,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// XOR n
     #[rstest]
     #[case(0x00, 0x00, 0x00)]
     #[case(0xFF, 0xFF, 0x00)]
@@ -5562,6 +5897,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::XorImm8 { imm: y };
         machine.exec(ins);
@@ -5573,8 +5909,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// CCF
     #[rstest]
     fn it_execs_ccf(
         #[values(true, false)] sub_bcd: bool,
@@ -5584,6 +5922,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(F, 0);
+        machine.set_mticks(0x00);
 
         machine.assign_flag(SubBCD, sub_bcd);
         machine.assign_flag(HalfCarryBCD, half_carry);
@@ -5596,8 +5935,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(!carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// SCF
     #[rstest]
     fn it_execs_scf(
         #[values(true, false)] sub_bcd: bool,
@@ -5607,6 +5948,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(F, 0);
+        machine.set_mticks(0x00);
 
         machine.assign_flag(SubBCD, sub_bcd);
         machine.assign_flag(HalfCarryBCD, half_carry);
@@ -5619,8 +5961,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(true, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// DAA
     #[rstest]
     // 0x00 + 0x00
     #[case(0x00, 0x00, (true, false, false, false), (true, false, false, false))]
@@ -5662,6 +6006,7 @@ mod exec_tests {
         machine.assign_flag(SubBCD, sub);
         machine.assign_flag(HalfCarryBCD, hc);
         machine.assign_flag(Carry, cry);
+        machine.set_mticks(0x00);
 
         machine.set_r8(A, from);
 
@@ -5675,13 +6020,16 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// CPL
     #[rstest]
     fn it_execs_cmpl_acc(#[values(0x00, 0xFF, 0xF0, 0x0F)] value: u8) {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(A, value);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::CmplAcc;
         machine.exec(ins);
@@ -5691,8 +6039,10 @@ mod exec_tests {
 
         assert_eq!(true, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// INC rr
     #[rstest]
     #[case(0x0000, 0x0001)]
     #[case(0x0001, 0x0002)]
@@ -5702,13 +6052,17 @@ mod exec_tests {
         machine.set_r16(src, from);
 
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Inc16 { src };
         machine.exec(ins);
 
         assert_eq!(0x01, machine.get_pc());
         assert_eq!(to, machine.get_r16(src));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
+
+    /// DEC rr
     #[rstest]
     #[case(0x0001, 0x0000)]
     #[case(0x0002, 0x0001)]
@@ -5718,14 +6072,17 @@ mod exec_tests {
         machine.set_r16(src, from);
 
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Dec16 { src };
         machine.exec(ins);
 
         assert_eq!(0x01, machine.get_pc());
         assert_eq!(to, machine.get_r16(src));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// ADD HL, rr
     #[rstest]
     #[case(0x0001, 0x0000, 0x0001, (false, false, false, false))]
     #[case(0x000F, 0x0001, 0x0010, (false, false, false, false))]
@@ -5742,6 +6099,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_r16(src, x);
         machine.set_r16(HL, y);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Add16HL { src };
         machine.exec(ins);
@@ -5752,7 +6110,11 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
+
+
+    /// ADD HL, HL
     #[rstest]
     #[case(0x0001,  0x0002, (false, false, false, false))]
     #[case(0x000F,  0x001E, (false, false, false, false))]
@@ -5766,6 +6128,7 @@ mod exec_tests {
     ) {
         let mut machine = Machine::new();
         machine.set_r16(HL, x);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Add16HL { src: HL };
         machine.exec(ins);
@@ -5776,8 +6139,10 @@ mod exec_tests {
         assert_eq!(sub_bcd, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// ADD SP,e 
     #[rstest]
     #[case(0x0000, 0x00, 0x0000, (false, false))]
     #[case(0x0000, 0x01, 0x0001, (false, false))]
@@ -5797,6 +6162,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r16(SP, sp);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::AddSPImm8 { imm };
         machine.exec(ins);
@@ -5808,8 +6174,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(half_carry, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// RLCA
     #[rstest]
     #[case(0b0000_0000, 0b0000_00000, false)]
     #[case(0b0000_0001, 0b0000_00010, false)]
@@ -5820,6 +6188,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RLCA;
         machine.exec(ins);
@@ -5831,8 +6200,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    // RRCA
     #[rstest]
     #[case(0b0000_0000, 0b0000_0000, false)]
     #[case(0b0000_0001, 0b1000_0000, true)]
@@ -5843,6 +6214,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(A, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RRCA;
         machine.exec(ins);
@@ -5854,8 +6226,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// RLA
     #[rstest]
     #[case((0b0000_0000, false), (0b0000_00000,false))]
     #[case((0b0000_0000, true), (0b0000_00001,false))]
@@ -5867,6 +6241,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, from);
         machine.assign_flag(Carry, fc);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RLA;
         machine.exec(ins);
@@ -5878,8 +6253,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(tc, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// RRA
     #[rstest]
     #[case((0b0000_0000, false), (0b0000_00000,false))]
     #[case((0b0000_0000, true), (0b1000_0000,false))]
@@ -5892,6 +6269,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(A, from);
         machine.assign_flag(Carry, fc);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RRA;
         machine.exec(ins);
@@ -5903,8 +6281,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(tc, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// RLC, r
     #[rstest]
     #[case(0b0000_0000, (0b0000_00000, true, false))]
     #[case(0b1000_0000, (0b0000_0001, false, true))]
@@ -5918,6 +6298,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(src, value);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RLC { src };
         machine.exec(ins);
@@ -5928,8 +6309,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// RLC (HL)
     #[rstest]
     #[case(0b0000_0000, (0b0000_00000, true, false))]
     #[case(0b1000_0000, (0b0000_0001, false, true))]
@@ -5941,6 +6324,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
+        machine.set_mticks(0x00);
 
         machine.set_mem8(addr, value);
 
@@ -5953,8 +6337,11 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+
+    /// RRC
     #[rstest]
     #[case(0b0000_0000, (0b0000_00000, true, false))]
     #[case(0b0000_0001, (0b1000_0000, false, true))]
@@ -5968,6 +6355,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r8(src, value);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RRC { src };
         machine.exec(ins);
@@ -5978,8 +6366,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// RRC (HL)
     #[rstest]
     #[case(0b0000_0000, (0b0000_00000, true, false))]
     #[case(0b0000_0001, (0b1000_0000, false, true))]
@@ -5991,6 +6381,7 @@ mod exec_tests {
         let mut machine = Machine::new();
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
+        machine.set_mticks(0x00);
 
         machine.set_mem8(addr, value);
 
@@ -6003,8 +6394,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// RL r
     #[rstest]
     #[case((0b0000_0000, false), (0b0000_00000, true, false))]
     #[case((0b0000_0000, true), (0b0000_00001, false, false))]
@@ -6021,6 +6414,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(src, from);
         machine.assign_flag(Carry, fc);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RL { src };
         machine.exec(ins);
@@ -6031,8 +6425,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(tc, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// RL (HL)
     #[rstest]
     #[case((0b0000_0000, false), (0b0000_00000, true, false))]
     #[case((0b0000_0000, true), (0b0000_00001, false, false))]
@@ -6047,6 +6443,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.assign_flag(Carry, fc);
+        machine.set_mticks(0x00);
 
         machine.set_mem8(addr, from);
 
@@ -6059,8 +6456,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// RR r
     #[rstest]
     #[case((0b0000_0000, false), (0b0000_00000, true, false))]
     #[case((0b0000_0000, true), (0b1000_0000, false, false))]
@@ -6077,6 +6476,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r8(src, from);
         machine.assign_flag(Carry, fc);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RR { src };
         machine.exec(ins);
@@ -6087,8 +6487,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(tc, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// RR HL
     #[rstest]
     #[case((0b0000_0000, false), (0b0000_00000, true, false))]
     #[case((0b0000_0000, true), (0b1000_0000, false, false))]
@@ -6103,6 +6505,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.assign_flag(Carry, fc);
+        machine.set_mticks(0x00);
 
         machine.set_mem8(addr, from);
 
@@ -6115,8 +6518,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// SLA r
     #[rstest]
     #[case(0b0000_0000, (0b0000_0000, true, false))]
     #[case(0b0000_0001, (0b0000_0010, false, false))]
@@ -6131,6 +6536,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SLA { src };
         machine.exec(ins);
@@ -6142,8 +6548,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// SLA (HL)
     #[rstest]
     #[case(0b0000_0000, (0b0000_0000, true, false))]
     #[case(0b0000_0001, (0b0000_0010, false, false))]
@@ -6157,6 +6565,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SLAIndirectHL;
         machine.exec(ins);
@@ -6168,8 +6577,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// SRA r
     #[rstest]
     #[case(0b0000_0000, (0b0000_0000, true, false))]
     #[case(0b1000_0000, (0b1100_0000, false, false))]
@@ -6185,6 +6596,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SRA { src };
         machine.exec(ins);
@@ -6196,8 +6608,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// SRA (HL)
     #[rstest]
     #[case(0b0000_0000, (0b0000_0000, true, false))]
     #[case(0b1000_0000, (0b1100_0000, false, false))]
@@ -6212,6 +6626,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SRAIndirectHL;
         machine.exec(ins);
@@ -6223,8 +6638,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// SWAP r
     #[rstest]
     #[case(0b0000_0000, 0b0000_0000)]
     #[case(0b1111_0000, 0b0000_1111)]
@@ -6235,6 +6652,8 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
+
         let ins = Instruction::Swap { src };
         machine.exec(ins);
 
@@ -6245,8 +6664,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// SWAP (HL)
     #[rstest]
     #[case(0b0000_0000, 0b0000_0000)]
     #[case(0b1111_0000, 0b0000_1111)]
@@ -6259,6 +6680,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
+        machine.set_mticks(0x00);
 
         machine.set_mem8(addr, from);
 
@@ -6272,8 +6694,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// SRL r
     #[rstest]
     #[case(0b0000_0000, (0b0000_0000, true, false))]
     #[case(0b1000_0000, (0b0100_0000, false, false))]
@@ -6289,6 +6713,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SRL { src };
         machine.exec(ins);
@@ -6300,8 +6725,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// SRL (HL)
     #[rstest]
     #[case(0b0000_0000, (0b0000_0000, true, false))]
     #[case(0b1000_0000, (0b0100_0000, false, false))]
@@ -6316,6 +6743,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SRLIndirectHL;
         machine.exec(ins);
@@ -6327,8 +6755,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// BIT b, r
     #[rstest]
     #[case(0b0000_0000, 0, false)]
     #[case(0b0000_0001, 0, true)]
@@ -6345,6 +6775,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::BIT { src, bit };
         machine.exec(ins);
@@ -6355,7 +6786,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
+
+    /// BIT b, (HL)
     #[rstest]
     #[case(0b0000_0000, 0, false)]
     #[case(0b0000_0001, 0, true)]
@@ -6370,6 +6804,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::BITIndirectHL { bit };
         machine.exec(ins);
@@ -6380,8 +6815,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(true, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// RES b,r
     #[rstest]
     #[case(0b0000_0000, 0, 0b0000_00000)]
     #[case(0b0000_0001, 0, 0b0000_0000)]
@@ -6397,6 +6834,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RES { src, bit };
         machine.exec(ins);
@@ -6408,8 +6846,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// RES b, (HL)
     #[rstest]
     #[case(0b0000_0000, 0, 0b0000_00000)]
     #[case(0b0000_0001, 0, 0b0000_0000)]
@@ -6423,6 +6863,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RESIndirectHL { bit };
         machine.exec(ins);
@@ -6434,8 +6875,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// SET b, r
     #[rstest]
     #[case(0b0000_0000, 0, 0b0000_00001)]
     #[case(0b0000_0001, 0, 0b0000_0001)]
@@ -6451,6 +6894,7 @@ mod exec_tests {
 
         machine.set_pc(0x00);
         machine.set_r8(src, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SET { src, bit };
         machine.exec(ins);
@@ -6462,8 +6906,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// SET b, (HL)
     #[rstest]
     #[case(0b0000_0000, 0, 0b0000_00001)]
     #[case(0b0000_0001, 0, 0b0000_0001)]
@@ -6477,6 +6923,7 @@ mod exec_tests {
         machine.set_pc(0x00);
         machine.set_r16(HL, addr);
         machine.set_mem8(addr, from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::SETIndirectHL { bit };
         machine.exec(ins);
@@ -6488,13 +6935,16 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// JP nn
     #[rstest]
     fn it_execs_jp(#[values(0x0000, 0x0001, 0x8000, 0xFFFF)] addr: u16) {
         let mut machine = Machine::new();
 
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::JP { addr };
         machine.exec(ins);
@@ -6505,14 +6955,17 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// JP HL
     #[rstest]
     fn it_execs_jp_hl(#[values(0x0000, 0x0001, 0x8000, 0xFFFF)] addr: u16) {
         let mut machine = Machine::new();
 
         machine.set_r16(HL, addr);
         machine.set_pc(0x00);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::JPHL;
         machine.exec(ins);
@@ -6523,23 +6976,26 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// JP cc, nn
     #[rstest]
-    #[case(0x0000, (false, false), NZ, 0x0000)]
-    #[case(0x0000, (true,  false), Z, 0x0000)]
-    #[case(0x8000, (false, false), Z, 0x0003)]
-    #[case(0x8000, (true,  false), Z, 0x8000)]
-    #[case(0x8000, (false,  false), NZ, 0x8000)]
-    #[case(0x1000, (false, false), CARRY, 0x0003)]
-    #[case(0x1000, (false, true), CARRY, 0x1000)]
-    #[case(0x1000, (false, false), NCARRY, 0x1000)]
-    #[case(0x1000, (false, true), NCARRY, 0x0003)]
+    #[case(0x0000, (false, false), NZ, 0x0000, 4)]
+    #[case(0x0000, (true,  false), Z, 0x0000, 4)]
+    #[case(0x8000, (false, false), Z, 0x0003, 3)]
+    #[case(0x8000, (true,  false), Z, 0x8000, 4)]
+    #[case(0x8000, (false,  false), NZ, 0x8000, 4)]
+    #[case(0x1000, (false, false), CARRY, 0x0003, 3)]
+    #[case(0x1000, (false, true), CARRY, 0x1000, 4)]
+    #[case(0x1000, (false, false), NCARRY, 0x1000, 4)]
+    #[case(0x1000, (false, true), NCARRY, 0x0003, 3)]
     fn it_execs_jp_cc(
         #[case] target: u16,
         #[case] (zero, carry): (bool, bool),
         #[case] cond: Cond,
         #[case] pc: u16,
+        #[case] ticks: usize,
     ) {
         let mut machine = Machine::new();
         machine.set_pc(0x0000);
@@ -6555,8 +7011,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), ticks);
     }
 
+    /// JR  e
     #[rstest]
     #[case(0x0000, 0x00, 0x0000)]
     #[case(0x0000, 0x01, 0x0001)]
@@ -6567,6 +7025,7 @@ mod exec_tests {
         let mut machine = Machine::new();
 
         machine.set_pc(from);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::JR { offset };
         machine.exec(ins);
@@ -6577,30 +7036,34 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// JR cc, e
     #[rstest]
-    #[case((0x0000, 0x00), (false, false), NZ, 0x0000)]
-    #[case((0x0000, 0x00), (true,  false), Z, 0x0000)]
-    #[case((0x8000, 0x01), (false, false), Z, 0x8002)]
-    #[case((0x8000, 0x01), (true,  false), Z, 0x8001)]
-    #[case((0x8000, 0x7F), (true,  false), Z, 0x807F)]
-    #[case((0x8000, -0x80), (true,  false), Z, 0x7F80)]
-    #[case((0x8000, 0x01), (false,  false), NZ, 0x8001)]
-    #[case((0x1000, 0x7F), (false, false), CARRY, 0x1002)]
-    #[case((0x1000, 0x7F), (false, true), CARRY, 0x107F)]
-    #[case((0x0000, -0x01), (false, false), NCARRY, 0xFFFF)]
-    #[case((0x0000, -0x01), (false, true), NCARRY, 0x0002)]
+    #[case((0x0000, 0x00), (false, false), NZ, 0x0000, 3)]
+    #[case((0x0000, 0x00), (true,  false), Z, 0x0000, 3)]
+    #[case((0x8000, 0x01), (false, false), Z, 0x8002, 2)]
+    #[case((0x8000, 0x01), (true,  false), Z, 0x8001, 3)]
+    #[case((0x8000, 0x7F), (true,  false), Z, 0x807F, 3)]
+    #[case((0x8000, -0x80), (true,  false), Z, 0x7F80, 3)]
+    #[case((0x8000, 0x01), (false,  false), NZ, 0x8001, 3)]
+    #[case((0x1000, 0x7F), (false, false), CARRY, 0x1002, 2)]
+    #[case((0x1000, 0x7F), (false, true), CARRY, 0x107F, 3)]
+    #[case((0x0000, -0x01), (false, false), NCARRY, 0xFFFF, 3)]
+    #[case((0x0000, -0x01), (false, true), NCARRY, 0x0002, 2)]
     fn it_execs_jr_cc(
         #[case] (from, offset): (u16, i8),
         #[case] (zero, carry): (bool, bool),
         #[case] cond: Cond,
         #[case] pc: u16,
+        #[case] ticks: usize
     ) {
         let mut machine = Machine::new();
         machine.set_pc(from);
         machine.assign_flag(Zero, zero);
         machine.assign_flag(Carry, carry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::JRCC { cond, offset };
         machine.exec(ins);
@@ -6611,8 +7074,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), ticks);
     }
 
+    /// CALL nn
     #[rstest]
     fn it_execs_call(
         #[values(0x0000, 0x0001, 0xFFFE, 0x8000)] pc: u16,
@@ -6623,6 +7088,7 @@ mod exec_tests {
 
         machine.set_pc(pc);
         machine.set_r16(SP, sp);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::Call { addr };
         machine.exec(ins);
@@ -6636,7 +7102,11 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x06);
     }
+
+
+    /// CALL cc, nn
     #[rstest]
     #[case((false, false), NZ)]
     #[case((true, false), Z)]
@@ -6654,6 +7124,7 @@ mod exec_tests {
         machine.set_sp(current_sp);
         machine.assign_flag(Zero, zero);
         machine.assign_flag(Carry, carry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::CallCC {
             cond,
@@ -6670,8 +7141,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x06);
     }
 
+    /// CALL cc, nn
     #[rstest]
     #[case((true, false), NZ)]
     #[case((false, false), Z)]
@@ -6689,6 +7162,7 @@ mod exec_tests {
         machine.set_sp(current_sp);
         machine.assign_flag(Zero, zero);
         machine.assign_flag(Carry, carry);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::CallCC {
             cond,
@@ -6703,8 +7177,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x03);
     }
 
+    /// RET
     #[rstest]
     fn it_execs_ret(
         #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
@@ -6715,6 +7191,7 @@ mod exec_tests {
 
         machine.set_pc(current_pc);
         machine.set_sp(current_sp);
+        machine.set_mticks(0x00);
 
         machine.set_mem16(current_sp, return_address);
 
@@ -6728,8 +7205,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// RET cc
     #[rstest]
     #[case((false, false), NZ)]
     #[case((true, false), Z)]
@@ -6748,6 +7227,7 @@ mod exec_tests {
         machine.set_sp(current_sp);
         machine.assign_flag(Zero, zero);
         machine.assign_flag(Carry, carry);
+        machine.set_mticks(0x00);
 
         machine.set_mem16(current_sp, return_address);
 
@@ -6761,8 +7241,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x05);
     }
 
+    /// RET cc
     #[rstest]
     #[case((true, false), NZ)]
     #[case((false, false), Z)]
@@ -6781,6 +7263,7 @@ mod exec_tests {
         machine.set_sp(current_sp);
         machine.assign_flag(Zero, zero);
         machine.assign_flag(Carry, carry);
+        machine.set_mticks(0x00);
 
         machine.set_mem16(current_sp, return_address);
 
@@ -6794,8 +7277,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(carry, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x02);
     }
 
+    /// RETI
     #[rstest]
     fn it_execs_reti(
         #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
@@ -6807,6 +7292,7 @@ mod exec_tests {
         machine.set_pc(current_pc);
         machine.set_sp(current_sp);
         machine.clear_ime();
+        machine.set_mticks(0x00);
 
         machine.set_mem16(current_sp, return_address);
 
@@ -6821,8 +7307,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// RST n
     #[rstest]
     fn it_execs_restart(
         #[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16,
@@ -6833,6 +7321,7 @@ mod exec_tests {
 
         machine.set_pc(current_pc);
         machine.set_r16(SP, current_sp);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::RST { addr };
         machine.exec(ins);
@@ -6846,8 +7335,10 @@ mod exec_tests {
         assert_eq!(false, machine.get_flag(SubBCD));
         assert_eq!(false, machine.get_flag(HalfCarryBCD));
         assert_eq!(false, machine.get_flag(Carry));
+        assert_eq!(machine.get_mticks(), 0x04);
     }
 
+    /// HALT
     #[rstest]
     fn it_execs_halt_interrupts_enabled(#[values(0x0000, 0x0001, 0x8000, 0xFFFF)] current_pc: u16) {
         let mut machine = Machine::new();
@@ -6861,6 +7352,7 @@ mod exec_tests {
         assert_eq!(false, machine.is_running());
     }
 
+    /// HALT
     #[rstest]
     /// This isn't quite right
     /// The actual game boy loads the bytes of the instruction one at a time
@@ -6885,6 +7377,7 @@ mod exec_tests {
         assert_eq!(true, machine.is_running());
     }
 
+    /// STOP
     #[rstest]
     fn it_execs_stop() {
         // TODO: Test stop's 'wait for button press' behaviour
@@ -6904,16 +7397,19 @@ mod exec_tests {
         // assert_eq!(false, machine.is_stopped());
     }
 
+    /// DI
     #[rstest]
     fn it_execs_disable_interrupts(#[values(true, false)] ime: bool) {
         let mut machine = Machine::new();
         machine.assign_ime(ime);
+        machine.set_mticks(0x00);
 
         let ins = Instruction::DI;
         machine.exec(ins);
 
         assert_eq!(0x01, machine.get_pc());
         assert_eq!(false, machine.get_ime());
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
     // #[rstest]
@@ -6934,26 +7430,32 @@ mod exec_tests {
     //     assert_eq!(false, machine.get_ime());
     // }
 
+    /// EI
     #[rstest]
     // TODO: Implement delayed EI behaviour
     fn it_execs_enable_interrupts() {
         let mut machine = Machine::new();
         machine.clear_ime();
+        machine.set_mticks(0x00);
 
         let ins = Instruction::EI;
         machine.exec(ins);
 
         assert_eq!(true, machine.get_ime());
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 
+    /// NOP
     #[rstest]
     fn it_execs_nop() {
         let mut machine = Machine::new();
+        machine.set_mticks(0x00);
 
         let ins = Instruction::NOP;
         machine.exec(ins);
 
         assert_eq!(0x01, machine.get_pc());
+        assert_eq!(machine.get_mticks(), 0x01);
     }
 }
 
